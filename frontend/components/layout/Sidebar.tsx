@@ -1,0 +1,102 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuthStore, useUIStore } from "@/lib/store";
+import { cn, initials } from "@/lib/utils";
+
+const NAV_ITEMS = [
+  { href: "/dashboard",  icon: "⬡", label: "Dashboard" },
+  { href: "/board",      icon: "⊞", label: "Kanban Board" },
+  { href: "/gantt",      icon: "▬", label: "Gantt Chart" },
+  { href: "/intake",     icon: "✦", label: "AI Intake" },
+  { href: "/meetings",   icon: "◎", label: "Meetings" },
+  { href: "/emails",     icon: "✉", label: "Emails" },
+  { href: "/search",     icon: "⌕", label: "Search" },
+  { href: "/analytics",  icon: "◈", label: "Analytics" },
+];
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, clearAuth } = useAuthStore();
+  const { sidebarOpen, toggleCommandPalette } = useUIStore();
+
+  if (!sidebarOpen) return null;
+
+  return (
+    <aside className="w-60 min-h-screen bg-[#080f20] border-r border-slate-800/60 flex flex-col shrink-0">
+      {/* Logo */}
+      <div className="px-4 py-4 border-b border-slate-800/60">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
+            <span className="text-white font-bold text-xs">P</span>
+          </div>
+          <span className="text-white font-semibold text-sm tracking-wide">PulseOps</span>
+          <span className="ml-auto text-[10px] text-indigo-400 bg-indigo-950 border border-indigo-800 rounded px-1.5 py-0.5 font-medium">
+            AI
+          </span>
+        </div>
+      </div>
+
+      {/* Command palette trigger */}
+      <div className="px-3 pt-3 pb-2">
+        <button
+          onClick={toggleCommandPalette}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-slate-500 text-xs hover:border-slate-700 transition-colors"
+        >
+          <span>⌕</span>
+          <span>Search…</span>
+          <kbd className="ml-auto text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-600 font-mono">⌘K</kbd>
+        </button>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-2 space-y-0.5">
+        {NAV_ITEMS.map((item) => {
+          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-smooth",
+                active
+                  ? "bg-indigo-600/15 text-indigo-300 border-l-2 border-indigo-500 pl-[10px]"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              )}
+            >
+              <span className="text-base leading-none">{item.icon}</span>
+              <span>{item.label}</span>
+              {item.href === "/intake" && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500 ai-pulse" />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* User */}
+      {user && (
+        <div className="px-3 py-3 border-t border-slate-800/60">
+          <div className="flex items-center gap-2.5 px-2">
+            <div className="w-7 h-7 rounded-full bg-indigo-700 flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-medium">{initials(user.name)}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-white font-medium truncate">{user.name}</p>
+              <p className="text-[10px] text-slate-500 truncate">{user.role}</p>
+            </div>
+            <button
+              onClick={() => { clearAuth(); router.push("/login"); }}
+              className="text-slate-600 hover:text-slate-400 text-xs transition-colors"
+              title="Sign out"
+            >
+              ⎋
+            </button>
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+}

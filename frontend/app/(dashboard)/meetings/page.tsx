@@ -1,0 +1,296 @@
+"use client";
+
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { aiApi, projectsApi } from "@/lib/api";
+import { Header } from "@/components/layout/Header";
+import { PRIORITY_CONFIG } from "@/lib/types";
+import type { TranscriptResult, Project } from "@/lib/types";
+
+export default function MeetingsPage() {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [transcript, setTranscript] = useState("");
+  const [source, setSource] = useState("manual");
+  const [result, setResult] = useState<TranscriptResult | null>(null);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [tasksCreated, setTasksCreated] = useState(false);
+  const [createdCount, setCreatedCount] = useState(0);
+
+  const { data: projects } = useQuery<Project[]>({
+    queryKey: ["projects"],
+    queryFn: () => projectsApi.list(),
+  });
+
+  const analyzeMutation = useMutation({
+    mutationFn: () =>
+      aiApi.extractTranscript({ title, raw_transcript: transcript, source }),
+    onSuccess: (data: TranscriptResult) => {
+      setResult(data);
+      // Pre-select all action items
+      setSelectedIndices(new Set(data.action_items.map((_, i) => i)));
+      setTasksCreated(false);
+      setCreatedCount(0);
+    },
+  });
+
+  const createTasksMutation = useMutation({
+    mutationFn: () => {
+      if (!result) throw new Error("No result");
+      const indices = Array.from(selectedIndices);
+      // If no project selected, use transcript's linked project or prompt user
+      const projectId = selectedProjectId || result.project_id || "";
+      if (!projectId) throw new Error("Please select a project");
+      return aiApi.transcriptCreateTasks(result.id, indices, projectId);
+    },
+    onSuccess: (data) => {
+      setTasksCreated(true);
+      setCreatedCount(data.tasks_created);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const toggleIndex = (i: number) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (!result) return;
+    setSelectedIndices(new Set(result.action_items.map((_, i) => i)));
+  };
+
+  const deselectAll = () => setSelectedIndices(new Set());
+
+  const canCreate = result && selectedIndices.size > 0 && (selectedProjectId || result.project_id);
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <Header title="Meeting Intelligence" subtitle="Extract action items and decisions from transcripts" />
+
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="max-w-3xl mx-auto space-y-5">
+          {/* Input */}
+          <div className="bg-[#0f1629] border border-slate-800 rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-indigo-400">◎</span>
+              <h2 className="text-sm font-semibold text-white">Paste Meeting Transcript</h2>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1.5">Meeting Title</label>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Q2 Sprint Planning"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1.5">Source</label>
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="manual">Manual paste</option>
+                  <option value="zoom">Zoom</option>
+                  <option value="teams">Microsoft Teams</option>
+                  <option value="google_meet">Google Meet</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1.5">Transcript</label>
+              <textarea
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                placeholder={`Paste your meeting transcript here...\n\nExample:\n"Anayna: Let's discuss the API timeline.\nStephen: I'll finish the auth system by Wednesday.\nTom: I'll take the database schema."`}
+                rows={8}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-indigo-500 transition-colors leading-relaxed"
+              />
+            </div>
+
+            <button
+              onClick={() => analyzeMutation.mutate()}
+              disabled={!title || transcript.length < 50 || analyzeMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {analyzeMutation.isPending ? (
+                <><span className="ai-pulse">✦</span><span>Analyzing…</span></>
+              ) : (
+                <><span>✦</span><span>Analyze Transcript</span></>
+              )}
+            </button>
+          </div>
+
+          {/* Result */}
+          {result && (
+            <div className="bg-[#0f1629] border border-indigo-800/40 rounded-xl p-6 space-y-5">
+              <h2 className="text-sm font-semibold text-white border-b border-slate-800 pb-4">
+                📋 Meeting Analysis — {result.title}
+              </h2>
+
+              {/* Summary */}
+              <div>
+                <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Summary</p>
+                <p className="text-sm text-slate-300 leading-relaxed">{result.summary}</p>
+              </div>
+
+              {/* Attendees */}
+              {result.attendees.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Attendees</p>
+                  <div className="flex flex-wrap gap-2">
+                    {result.attendees.map((a) => (
+                      <span key={a} className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">
+                        {a}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Items — selectable */}
+              {result.action_items.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] text-slate-500 uppercase tracking-wide">
+                      Action Items ({selectedIndices.size}/{result.action_items.length} selected)
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={selectAll}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-700">·</span>
+                      <button
+                        onClick={deselectAll}
+                        className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {result.action_items.map((item, i) => {
+                      const selected = selectedIndices.has(i);
+                      const priorityCfg = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG.medium;
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => toggleIndex(i)}
+                          className={`flex items-start gap-3 rounded-lg p-3 cursor-pointer transition-colors border ${
+                            selected
+                              ? "bg-indigo-950/30 border-indigo-700/50"
+                              : "bg-slate-900/60 border-transparent hover:border-slate-700"
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <div className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-colors ${
+                            selected ? "border-indigo-500 bg-indigo-500" : "border-slate-600"
+                          }`}>
+                            {selected && <span className="text-[8px] text-white font-bold">✓</span>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-slate-200">{item.task}</p>
+                            <div className="flex items-center gap-3 mt-1 flex-wrap">
+                              {item.owner && (
+                                <span className="text-[11px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-full">
+                                  {item.owner}
+                                </span>
+                              )}
+                              {item.deadline && (
+                                <span className="text-[11px] text-amber-500">Due: {item.deadline}</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-medium shrink-0 px-1.5 py-0.5 rounded ${priorityCfg.color} ${priorityCfg.bg}`}>
+                            {priorityCfg.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Decisions */}
+              {result.decisions.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Decisions</p>
+                  <ul className="space-y-1.5">
+                    {result.decisions.map((d, i) => (
+                      <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                        <span className="text-green-500 shrink-0 mt-0.5">✓</span>
+                        <span>{d}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Blockers */}
+              {result.blockers.length > 0 && (
+                <div className="bg-red-950/20 border border-red-800/30 rounded-lg p-3">
+                  <p className="text-[11px] text-red-400 uppercase tracking-wide mb-2">Blockers Mentioned</p>
+                  {result.blockers.map((b, i) => (
+                    <p key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                      <span className="text-red-400">⊗</span> {b}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Project picker + Create tasks */}
+              {!tasksCreated ? (
+                <div className="border-t border-slate-800 pt-4 space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1.5">Assign tasks to project</label>
+                    <select
+                      value={selectedProjectId || result.project_id || ""}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="">Select a project…</option>
+                      {projects?.map((p) => (
+                        <option key={p.id} value={p.id}>{p.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {createTasksMutation.isError && (
+                    <p className="text-xs text-red-400">
+                      {(createTasksMutation.error as Error)?.message || "Failed to create tasks"}
+                    </p>
+                  )}
+                  <button
+                    onClick={() => createTasksMutation.mutate()}
+                    disabled={!canCreate || createTasksMutation.isPending}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium text-sm rounded-lg transition-colors"
+                  >
+                    {createTasksMutation.isPending
+                      ? "Creating tasks…"
+                      : `Create ${selectedIndices.size} Selected Task${selectedIndices.size !== 1 ? "s" : ""}`}
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-3 text-green-400 text-sm font-medium border-t border-slate-800 pt-4">
+                  ✓ {createdCount} task{createdCount !== 1 ? "s" : ""} created successfully
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
