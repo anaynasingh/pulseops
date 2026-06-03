@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "note": "Requires GITHUB_TOKEN env var"
+    },
+    "slack": {
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp",
+      "note": "Requires SLACK_BOT_TOKEN — enable in Slack app settings"
+    }
+  }
+}
