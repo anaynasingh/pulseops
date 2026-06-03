@@ -2,7 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, delete
 from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.models import Project, Task, ActivityLog, ProjectStatus, PriorityLevel, User
@@ -153,5 +153,5 @@ async def delete_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    await db.delete(project)
+    await db.execute(delete(Project).where(Project.id == project_id))
     await db.commit()

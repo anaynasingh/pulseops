@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.models import Task, User
@@ -78,5 +78,5 @@ async def delete_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    await db.delete(task)
+    await db.execute(delete(Task).where(Task.id == task_id))
     await db.commit()

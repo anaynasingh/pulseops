@@ -147,7 +147,7 @@ Generate structured project information from this request.
         suggested_subtasks=ai_output.suggested_subtasks,
         suggested_next_steps=ai_output.suggested_next_steps,
         suggested_due_date=due_date,
-        suggested_priority=PriorityLevel(ai_output.suggested_priority),
+        suggested_priority=PriorityLevel(ai_output.suggested_priority) if ai_output.suggested_priority in PriorityLevel._value2member_map_ else PriorityLevel.medium,
         suggested_owners=ai_output.suggested_owners,
         ai_reasoning=ai_output.ai_reasoning,
         submitted_by=current_user.id,
@@ -493,7 +493,7 @@ Stakeholders: {', '.join(project.stakeholders) if project.stakeholders else 'Non
     )
 
     return PrioritySuggestionOut(
-        suggested_priority=PriorityLevel(ai_output.suggested_priority),
+        suggested_priority=PriorityLevel(ai_output.suggested_priority) if ai_output.suggested_priority in PriorityLevel._value2member_map_ else PriorityLevel.medium,
         reasoning=ai_output.reasoning,
         factors=ai_output.factors,
     )
@@ -591,12 +591,16 @@ async def ai_chat(
     """Agentic AI assistant — understands intent and takes action."""
 
     # ── Step 1: classify intent ───────────────────────────────────────────────
-    intent_result: _IntentOutput = await structured_completion(
-        system_prompt=_INTENT_SYSTEM,
-        user_prompt=payload.message,
-        response_model=_IntentOutput,
-        temperature=0.1,
-    )
+    try:
+        intent_result: _IntentOutput = await structured_completion(
+            system_prompt=_INTENT_SYSTEM,
+            user_prompt=payload.message,
+            response_model=_IntentOutput,
+            temperature=0.1,
+        )
+    except Exception as exc:
+        logger.error(f"Intent classification failed: {exc}", exc_info=True)
+        return {"reply": "Sorry, I couldn't process that right now. Please try again.", "action": "error"}
 
     # ── Step 2: act on intent ─────────────────────────────────────────────────
 
@@ -631,16 +635,23 @@ async def ai_chat(
             target_project = res.scalar_one_or_none()
 
         if not target_project and payload.project_id:
-            res = await db.execute(select(Project).where(Project.id == UUID(payload.project_id)))
-            target_project = res.scalar_one_or_none()
+            try:
+                res = await db.execute(select(Project).where(Project.id == UUID(payload.project_id)))
+                target_project = res.scalar_one_or_none()
+            except ValueError:
+                pass
 
         # Extract all tasks from the message via second structured completion
-        multi_output: _MultiTaskOutput = await structured_completion(
-            system_prompt=_MULTI_TASK_SYSTEM,
-            user_prompt=payload.message,
-            response_model=_MultiTaskOutput,
-            temperature=0.2,
-        )
+        try:
+            multi_output: _MultiTaskOutput = await structured_completion(
+                system_prompt=_MULTI_TASK_SYSTEM,
+                user_prompt=payload.message,
+                response_model=_MultiTaskOutput,
+                temperature=0.2,
+            )
+        except Exception as exc:
+            logger.error(f"Task extraction failed: {exc}", exc_info=True)
+            return {"reply": "Sorry, I couldn't extract tasks right now. Please try again.", "action": "error"}
 
         proposed_tasks = multi_output.tasks or []
         n = len(proposed_tasks)
@@ -662,9 +673,9 @@ async def ai_chat(
     if not projects:
         context = "The workspace is empty — no projects yet."
     else:
-        blocked = [p for p in projects if p.status == "blocked"]
-        urgent = [p for p in projects if p.priority == "urgent"]
-        overdue = [p for p in projects if p.due_date and p.due_date < date.today() and p.status != "done"]
+        blocked = [p for p in projects if p.status == ProjectStatus.blocked]
+        urgent = [p for p in projects if p.priority == PriorityLevel.urgent]
+        overdue = [p for p in projects if p.due_date and p.due_date < date.today() and p.status != ProjectStatus.done]
         context = f"Workspace: {len(projects)} projects | {len(blocked)} blocked | {len(urgent)} urgent | {len(overdue)} overdue\n\n"
         for p in projects[:20]:
             context += f"- [{p.status}] {p.title} | {p.priority} priority | {p.progress_pct}% done | due {p.due_date or 'none'}"
@@ -676,11 +687,15 @@ async def ai_chat(
 You can see the user's workspace. Answer their question directly and concisely.
 Be specific. Use bullet points where helpful. Max 150 words."""
 
-    answer = await chat_completion(
-        system_prompt=f"{CHAT_SYSTEM}\n\nContext:\n{context}",
-        user_prompt=payload.message,
-        temperature=0.4,
-    )
+    try:
+        answer = await chat_completion(
+            system_prompt=f"{CHAT_SYSTEM}\n\nContext:\n{context}",
+            user_prompt=payload.message,
+            temperature=0.4,
+        )
+    except Exception as exc:
+        logger.error(f"Chat completion failed: {exc}", exc_info=True)
+        return {"reply": "Sorry, I couldn't respond right now. Please try again.", "action": "error"}
     return {"reply": answer}
 
 
