@@ -614,7 +614,6 @@ async def ai_chat(
             status=ProjectStatus.intake,
             priority=PriorityLevel(priority),
             created_by=current_user.id,
-            owner_id=current_user.id,
         )
         db.add(project)
         await db.commit()

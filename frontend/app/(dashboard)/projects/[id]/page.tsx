@@ -286,21 +286,26 @@ export default function ProjectDetailPage() {
       )}
 
       <div className="flex flex-col h-full overflow-hidden">
+        {/* Back navigation */}
+        <div className="flex items-center gap-3 px-6 pt-4 pb-2 shrink-0">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors group"
+          >
+            <span className="text-lg leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
+            <span>Back</span>
+          </button>
+        </div>
         <Header
           title={project.title}
           subtitle={`${project.status.replace("_", " ")} · ${project.priority} priority`}
           actions={
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { if (confirm("Delete this project?")) deleteProject.mutate(); }}
-                className="text-xs text-red-400 hover:text-red-300 transition-colors"
-              >
-                Delete
-              </button>
-              <button onClick={() => router.push("/board")} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
-                ← Board
-              </button>
-            </div>
+            <button
+              onClick={() => { if (confirm("Delete this project?")) deleteProject.mutate(); }}
+              className="text-xs text-red-400 hover:text-red-300 transition-colors"
+            >
+              Delete
+            </button>
           }
         />
 
