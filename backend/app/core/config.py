@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    CRON_SECRET: Optional[str] = None
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

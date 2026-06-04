@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore, useUIStore } from "@/lib/store";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { AIAssistantPanel } from "@/components/ai/AIAssistantPanel";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 
@@ -37,6 +38,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="absolute top-3 right-4 z-40">
+          <NotificationBell />
+        </div>
         {children}
       </main>
 

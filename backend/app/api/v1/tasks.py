@@ -58,6 +58,8 @@ async def update_task(
     update_data = payload.model_dump(exclude_unset=True)
     if "is_completed" in update_data and update_data["is_completed"] and not task.is_completed:
         update_data["completed_at"] = datetime.utcnow()
+    if "assigned_to" in update_data and update_data["assigned_to"] != task.assigned_to:
+        update_data["last_reminded_at"] = None
 
     for field, value in update_data.items():
         setattr(task, field, value)

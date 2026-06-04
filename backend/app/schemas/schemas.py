@@ -205,6 +205,22 @@ class ActivityLogOut(BaseModel):
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+class NotificationOut(BaseModel):
+    id: UUID
+    user_id: UUID
+    type: str
+    title: str
+    body: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[UUID] = None
+    is_read: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Project Health ────────────────────────────────────────────────────────────
 
 class ProjectHealthOut(BaseModel):

@@ -107,3 +107,13 @@ export const analyticsApi = {
     api.get(`/analytics/health/${project_id}`).then((r) => r.data),
   gantt: () => api.get("/analytics/gantt").then((r) => r.data),
 };
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export const notificationsApi = {
+  list: (params?: { limit?: number; unread?: boolean }) =>
+    api.get("/notifications", { params }).then((r) => r.data),
+  markRead: (id: string) =>
+    api.patch(`/notifications/${id}/read`).then((r) => r.data),
+  markAllRead: () => api.patch("/notifications/read-all").then((r) => r.data),
+};
