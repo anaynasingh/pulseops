@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useUIStore } from "@/lib/store";
@@ -94,13 +94,13 @@ export function AIAssistantPanel() {
     <div className="fixed right-0 top-0 bottom-0 w-80 bg-[#080f20] border-l border-slate-800 flex flex-col z-20 shadow-2xl">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3.5 border-b border-slate-800">
-        <span className="text-indigo-400 ai-pulse">✦</span>
+        <span className="text-indigo-400 ai-pulse">âœ¦</span>
         <span className="text-sm font-semibold text-white flex-1">AI Assistant</span>
         <span className="text-[10px] text-green-400 bg-green-900/30 border border-green-800/40 px-1.5 py-0.5 rounded">
           GPT-4o
         </span>
         <button onClick={toggleAIAssistant} className="text-slate-500 hover:text-white transition-colors ml-1">
-          ×
+          Ã—
         </button>
       </div>
 
@@ -131,7 +131,7 @@ export function AIAssistantPanel() {
               )}
             >
               {msg.role === "assistant" && (
-                <span className="text-indigo-400 mr-1">✦</span>
+                <span className="text-indigo-400 mr-1">âœ¦</span>
               )}
               {msg.content}
             </div>
@@ -155,7 +155,7 @@ export function AIAssistantPanel() {
             {/* Success state after confirmation */}
             {msg.tasksConfirmed && msg.confirmedCount !== undefined && (
               <div className="mt-2 text-[11px] text-green-400 font-medium px-1">
-                ✓ Created {msg.confirmedCount} task{msg.confirmedCount !== 1 ? "s" : ""}
+                âœ“ Created {msg.confirmedCount} task{msg.confirmedCount !== 1 ? "s" : ""}
               </div>
             )}
           </div>
@@ -163,8 +163,8 @@ export function AIAssistantPanel() {
 
         {loading && (
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-500 max-w-[90%]">
-            <span className="ai-pulse text-indigo-400">✦</span>{" "}
-            Thinking…
+            <span className="ai-pulse text-indigo-400">âœ¦</span>{" "}
+            Thinkingâ€¦
           </div>
         )}
         <div ref={bottomRef} />
@@ -178,7 +178,7 @@ export function AIAssistantPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder="Ask anything about your projects…"
+            placeholder="Ask anything about your projectsâ€¦"
             className="flex-1 bg-transparent text-xs text-white placeholder-slate-600 focus:outline-none"
           />
           <button
@@ -186,7 +186,7 @@ export function AIAssistantPanel() {
             disabled={!input.trim() || loading}
             className="text-indigo-400 disabled:opacity-30 hover:text-indigo-300 transition-colors"
           >
-            →
+            â†’
           </button>
         </div>
       </div>
@@ -194,7 +194,7 @@ export function AIAssistantPanel() {
   );
 }
 
-// ── Proposed Tasks Card ───────────────────────────────────────────────────────
+// â”€â”€ Proposed Tasks Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ProposedTasksCard({
   tasks,
@@ -227,7 +227,7 @@ function ProposedTasksCard({
     try {
       const selectedTasks = Array.from(selectedIndices).map((i) => tasks[i]);
       const result = await aiApi.confirmTasks(
-        selectedTasks as Record<string, unknown>[],
+        selectedTasks as unknown as Record<string, unknown>[],
         projectId || null
       );
       onConfirm(result.tasks_created);
@@ -279,7 +279,7 @@ function ProposedTasksCard({
                   selected ? "border-indigo-500 bg-indigo-500" : "border-slate-600"
                 )}
               >
-                {selected && <span className="text-[7px] text-white font-bold">✓</span>}
+                {selected && <span className="text-[7px] text-white font-bold">âœ“</span>}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] text-slate-200 leading-snug">{task.title}</p>
@@ -306,9 +306,10 @@ function ProposedTasksCard({
           disabled={selectedIndices.size === 0 || creating}
           className="w-full py-1.5 text-[11px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-lg transition-colors"
         >
-          {creating ? "Creating…" : `Create ${selectedIndices.size} Task${selectedIndices.size !== 1 ? "s" : ""}`}
+          {creating ? "Creatingâ€¦" : `Create ${selectedIndices.size} Task${selectedIndices.size !== 1 ? "s" : ""}`}
         </button>
       </div>
     </div>
   );
 }
+
