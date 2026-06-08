@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": ["Read", "Glob", "Grep", "Write", "Edit", "Bash(*)"],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(supabase db reset*--db-url*)",
+      "Bash(railway down)"
+    ],
+    "additionalDirectories": ["/tmp"]
+  }
+}
