@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "pulseops": {
+      "command": "python",
+      "args": ["mcp-servers/pulseops/server.py"],
+      "env": {
+        "PULSEOPS_API_URL": "http://localhost:8001/api/v1",
+        "PULSEOPS_EMAIL": "anayna.singh@prospect33.com",
+        "PULSEOPS_PASSWORD": "password123"
+      }
+    },
+    "m365": {
+      "command": "python",
+      "args": ["mcp-servers/m365/server.py"],
+      "env": {
+        "M365_CLIENT_ID": "7ba4bd53-ef92-4c2b-aa9f-fec4ab11e1ca",
+        "M365_TENANT_ID": "d2df1e4d-b444-4a6f-b465-92b187684c19"
+      }
+    }
+  }
+}
