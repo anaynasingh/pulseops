@@ -227,7 +227,7 @@ function ProposedTasksCard({
     try {
       const selectedTasks = Array.from(selectedIndices).map((i) => tasks[i]);
       const result = await aiApi.confirmTasks(
-        selectedTasks as Record<string, unknown>[],
+        selectedTasks as unknown as Record<string, unknown>[],
         projectId || null
       );
       onConfirm(result.tasks_created);
