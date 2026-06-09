@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { analyticsApi } from "@/lib/api";
-import { useAuthStore } from "@/lib/store";
+import { useAuthStore, useUIStore } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { StatsGrid } from "@/components/dashboard/StatsGrid";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
@@ -14,6 +14,8 @@ import type { DashboardStats } from "@/lib/types";
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { theme } = useUIStore();
+  const isLight = theme === "light";
   const [view, setView] = useState<"mine" | "team">("mine");
 
   // Personal dashboard
@@ -75,25 +77,29 @@ export default function DashboardPage() {
             {/* Personal stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: "My Tasks", value: myData?.stats?.my_total_tasks ?? 0, icon: "✓", color: "bg-indigo-500" },
-                { label: "High Priority", value: myData?.stats?.my_high_priority ?? 0, icon: "🔥", color: "bg-red-500" },
-                { label: "Overdue", value: myData?.stats?.my_overdue ?? 0, icon: "⚠", color: "bg-amber-500" },
-                { label: "My Projects", value: myData?.stats?.my_projects ?? 0, icon: "◈", color: "bg-blue-500" },
+                { label: "My Tasks",      value: myData?.stats?.my_total_tasks    ?? 0, icon: "✓", color: "bg-indigo-500" },
+                { label: "High Priority", value: myData?.stats?.my_high_priority  ?? 0, icon: "🔥", color: "bg-red-500" },
+                { label: "Overdue",       value: myData?.stats?.my_overdue        ?? 0, icon: "⚠", color: "bg-amber-500" },
+                { label: "My Projects",   value: myData?.stats?.my_projects       ?? 0, icon: "◈", color: "bg-blue-500" },
               ].map((s) => (
-                <div key={s.label} className="bg-[#0f1629] border border-slate-800 rounded-xl p-4 relative overflow-hidden">
-                  <div className={`absolute top-0 left-0 right-0 h-0.5 ${s.color}`} />
-                  <div className="flex items-start justify-between">
+                <div key={s.label} className={`border rounded-xl p-5 relative overflow-hidden ${isLight ? "bg-white border-slate-200" : "bg-[#0f1629] border-slate-800"}`}>
+                  <div className={`absolute top-0 left-0 right-0 h-1 rounded-t-xl ${s.color}`} />
+                  <div className="flex items-start justify-between mt-1">
                     <div>
-                      <p className="text-xs text-slate-500 mb-1">{s.label}</p>
+                      <p className={`text-sm font-medium mb-1.5 ${isLight ? "text-slate-600" : "text-slate-400"}`}>{s.label}</p>
                       {myLoading ? (
-                        <div className="h-7 w-10 bg-slate-800 rounded animate-pulse" />
+                        <div className={`h-9 w-12 rounded animate-pulse ${isLight ? "bg-slate-200" : "bg-slate-800"}`} />
                       ) : (
-                        <p className={`text-2xl font-bold ${s.label === "Overdue" && (myData?.stats?.my_overdue ?? 0) > 0 ? "text-amber-400" : "text-white"}`}>
+                        <p className={`text-3xl font-bold ${
+                          s.label === "Overdue" && (myData?.stats?.my_overdue ?? 0) > 0
+                            ? isLight ? "text-amber-700" : "text-amber-400"
+                            : isLight ? "text-slate-900" : "text-white"
+                        }`}>
                           {s.value}
                         </p>
                       )}
                     </div>
-                    <span className="text-xl opacity-60">{s.icon}</span>
+                    <span className="text-2xl">{s.icon}</span>
                   </div>
                 </div>
               ))}
@@ -101,13 +107,15 @@ export default function DashboardPage() {
 
             {/* Overdue alert */}
             {(myData?.stats?.my_overdue ?? 0) > 0 && (
-              <div className="bg-red-950/30 border border-red-800/40 rounded-xl p-4 flex items-start gap-3">
-                <span className="text-red-400 text-lg mt-0.5">⚠</span>
+              <div className={`border rounded-xl p-5 flex items-start gap-4 ${
+                isLight ? "bg-red-50 border-red-300" : "bg-red-950/30 border-red-800/40"
+              }`}>
+                <span className={`text-xl mt-0.5 ${isLight ? "text-red-600" : "text-red-400"}`}>⚠</span>
                 <div>
-                  <p className="text-sm font-medium text-red-300">
+                  <p className={`text-base font-bold ${isLight ? "text-red-800" : "text-red-300"}`}>
                     You have {myData.stats.my_overdue} overdue task{myData.stats.my_overdue > 1 ? "s" : ""}
                   </p>
-                  <p className="text-xs text-red-500 mt-0.5">These tasks are past their due date — tackle them first.</p>
+                  <p className={`text-sm mt-1 ${isLight ? "text-red-700" : "text-red-400"}`}>These tasks are past their due date — tackle them first.</p>
                 </div>
               </div>
             )}

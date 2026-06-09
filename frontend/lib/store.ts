@@ -39,27 +39,36 @@ interface UIState {
   commandPaletteOpen: boolean;
   aiAssistantOpen: boolean;
   activeProjectId: string | null;
+  theme: "dark" | "light";
   setSidebarOpen: (v: boolean) => void;
   toggleCommandPalette: () => void;
   toggleAIAssistant: () => void;
   setActiveProject: (id: string | null) => void;
+  toggleTheme: () => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
-  sidebarOpen: true,
-  commandPaletteOpen: false,
-  aiAssistantOpen: false,
-  activeProjectId: null,
-  setSidebarOpen: (v) => set({ sidebarOpen: v }),
-  toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
-  toggleAIAssistant: () => set((s) => ({ aiAssistantOpen: !s.aiAssistantOpen })),
-  setActiveProject: (id) => set({ activeProjectId: id }),
-}));
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      sidebarOpen: true,
+      commandPaletteOpen: false,
+      aiAssistantOpen: false,
+      activeProjectId: null,
+      theme: "light",
+      setSidebarOpen: (v) => set({ sidebarOpen: v }),
+      toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
+      toggleAIAssistant: () => set((s) => ({ aiAssistantOpen: !s.aiAssistantOpen })),
+      setActiveProject: (id) => set({ activeProjectId: id }),
+      toggleTheme: () => set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
+    }),
+    { name: "pulseops-ui", partialize: (s) => ({ theme: s.theme }) }
+  )
+);
 
 interface ReminderState {
   enabled: boolean;
-  intervalMin: number;       // minutes between reminders
-  snoozedUntil: number | null; // epoch ms; null = not snoozed
+  intervalMin: number;
+  snoozedUntil: number | null;
   visible: boolean;
   setEnabled: (v: boolean) => void;
   setIntervalMin: (v: number) => void;

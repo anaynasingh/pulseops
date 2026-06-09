@@ -33,6 +33,7 @@ class ProjectStatus(str, enum.Enum):
     review = "review"
     done = "done"
     potential = "potential"
+    cancelled = "cancelled"
 
 
 class PriorityLevel(str, enum.Enum):

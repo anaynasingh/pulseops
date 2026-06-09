@@ -20,13 +20,13 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
-  const { sidebarOpen, toggleCommandPalette } = useUIStore();
+  const { sidebarOpen, toggleCommandPalette, theme, toggleTheme } = useUIStore();
   const { enabled: reminderEnabled, intervalMin, setEnabled: setReminderEnabled, setIntervalMin, show } = useReminderStore();
 
   if (!sidebarOpen) return null;
 
   return (
-    <aside className="w-60 min-h-screen bg-[#080f20] border-r border-slate-800/60 flex flex-col shrink-0">
+    <aside className="w-60 h-screen bg-[#080f20] border-r border-slate-800/60 flex flex-col shrink-0 overflow-y-auto">
       {/* Logo */}
       <div className="px-4 py-4 border-b border-slate-800/60">
         <div className="flex items-center gap-2">
@@ -53,7 +53,7 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-2 space-y-0.5">
+      <nav className="px-3 py-2 space-y-0.5">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
           return (
@@ -76,6 +76,24 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Light / Dark mode toggle */}
+      <div className="px-3 py-2 border-t border-slate-800/60">
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-smooth"
+          title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+        >
+          <span className="text-base leading-none">{theme === "light" ? "◑" : "☀"}</span>
+          <span className="text-xs">{theme === "light" ? "Dark mode" : "Light mode"}</span>
+          <span className="ml-auto text-[10px] text-slate-600 bg-slate-800/60 px-1.5 py-0.5 rounded">
+            {theme === "light" ? "off" : "on"}
+          </span>
+        </button>
+      </div>
 
       {/* Hourly reminders */}
       <div className="px-3 py-3 border-t border-slate-800/60">

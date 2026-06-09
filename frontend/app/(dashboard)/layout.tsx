@@ -11,7 +11,7 @@ import { ReminderModal } from "@/components/layout/ReminderModal";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { aiAssistantOpen, commandPaletteOpen, toggleCommandPalette } = useUIStore();
+  const { aiAssistantOpen, commandPaletteOpen, toggleCommandPalette, theme } = useUIStore();
   const { enabled: reminderEnabled, intervalMin, snoozedUntil, show: showReminder } = useReminderStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -22,6 +22,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [user, router]);
 
+  // No DOM manipulation needed — theme applied via data-theme on wrapper div
+
   // Hourly reminder timer
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -29,7 +31,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const ms = intervalMin * 60 * 1000;
     intervalRef.current = setInterval(() => {
-      // Skip if currently snoozed
       if (snoozedUntil && Date.now() < snoozedUntil) return;
       showReminder();
     }, ms);
@@ -39,7 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, [reminderEnabled, intervalMin, snoozedUntil, showReminder]);
 
-  // Global Cmd+K / Ctrl+K shortcut — registered here so it works even when palette is closed
+  // Global Cmd+K / Ctrl+K shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -54,19 +55,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden" data-theme={theme}>
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden">
         {children}
       </main>
 
-      {/* AI Assistant Panel */}
       {aiAssistantOpen && <AIAssistantPanel />}
-
-      {/* Command Palette */}
       {commandPaletteOpen && <CommandPalette />}
-
-      {/* Hourly reminder modal */}
       <ReminderModal />
     </div>
   );
