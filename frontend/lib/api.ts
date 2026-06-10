@@ -108,7 +108,7 @@ export const searchApi = {
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
 export const analyticsApi = {
-  dashboard: () => api.get("/analytics/dashboard/").then((r) => r.data),
+  dashboard: () => api.get("/analytics/dashboard").then((r) => r.data),
   myDashboard: () => api.get("/analytics/my-dashboard").then((r) => r.data),
   health: (project_id: string) =>
     api.get(`/analytics/health/${project_id}`).then((r) => r.data),
