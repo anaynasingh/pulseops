@@ -832,29 +832,30 @@ class _DedupeMatch(BaseModel):
     suggested_status: Optional[str] = None   # if update_status
 
 
-_DEDUPE_SYSTEM = """You are a task deduplication agent for a team project management system.
+_DEDUPE_SYSTEM = """You are a task deduplication agent for a team project management tool.
 
-Given a list of PROPOSED tasks and the team's EXISTING tasks, identify:
-1. DUPLICATES: Proposed task is essentially the same as an existing one
-2. UPDATES: Proposed task implies an existing task has been completed or needs status change
-3. NEW: Proposed task is genuinely new and should be created
+Analyse each PROPOSED task against EXISTING tasks. Return a JSON object with key "matches" containing an array.
+
+Each element in "matches" MUST have exactly these fields:
+{
+  "proposed_title": "<exact proposed task title>",
+  "match_type": "duplicate" | "update" | "new",
+  "existing_task_id": "<UUID string from existing list>" | null,
+  "existing_task_title": "<title of matching existing task>" | null,
+  "existing_task_status": "<status of matching existing task>" | null,
+  "confidence": <float 0.0-1.0>,
+  "suggestion": "<one sentence: what you found and why>",
+  "suggested_action": "skip" | "update_status" | "create",
+  "suggested_status": "done" | "in_progress" | null
+}
 
 Rules:
-- Be fuzzy — "Fix CORS bug" and "Add CORS whitelist for Stephen" are the same task
-- If a meeting shows a feature was DEMOED WORKING, suggest marking the task complete
-- If a task is partially done, suggest "in_progress"
-- Confidence: 0.9+ = very sure, 0.7-0.9 = likely, below 0.7 = new task
-
-Respond with a JSON array of match objects. Each object has:
-- proposed_title: the proposed task title
-- match_type: "duplicate" | "update" | "new"
-- existing_task_id: UUID string or null
-- existing_task_title: string or null
-- existing_task_status: current status or null
-- confidence: float 0-1
-- suggestion: 1 sentence explaining what you found
-- suggested_action: "skip" | "update_status" | "create" | "merge"
-- suggested_status: "done" | "in_progress" | "todo" | null (only for update_status)"""
+- "duplicate": proposed task is essentially the same as existing (even if worded differently). Use "skip".
+- "update": the context implies an existing task changed status (e.g. feature was demoed = done). Use "update_status".
+- "new": no close match found. Use "create".
+- Be fuzzy with titles — "Fix CORS bug" == "Add CORS whitelist for Stephen"
+- confidence above 0.75 = match found; below = probably new
+- Return ALL proposed tasks in the array, even if they are new"""
 
 
 @router.post("/check-duplicates", response_model=dict)
@@ -915,8 +916,9 @@ PROPOSED NEW TASKS ({len(payload.proposed_tasks)}):
 Analyse each proposed task against the existing list. Return a JSON array."""
 
     import json as _json
-    response = await client.chat.completions.create(
-        model=MODEL,
+    from app.services.ai_service import client as _client, MODEL as _MODEL
+    response = await _client.chat.completions.create(
+        model=_MODEL,
         messages=[
             {"role": "system", "content": _DEDUPE_SYSTEM},
             {"role": "user", "content": user_prompt},
@@ -928,9 +930,26 @@ Analyse each proposed task against the existing list. Return a JSON array."""
     raw = response.choices[0].message.content
     try:
         parsed = _json.loads(raw)
-        matches = parsed if isinstance(parsed, list) else parsed.get("matches", parsed.get("tasks", []))
-    except Exception:
-        matches = [{"proposed_title": t.title, "match_type": "new", "suggested_action": "create", "confidence": 1.0, "suggestion": "Could not analyse."} for t in payload.proposed_tasks]
+        # Handle various response shapes
+        if isinstance(parsed, list):
+            matches = parsed
+        elif isinstance(parsed, dict):
+            matches = (
+                parsed.get("matches") or
+                parsed.get("tasks") or
+                parsed.get("results") or
+                list(parsed.values())[0] if parsed else []
+            )
+        else:
+            matches = []
+        # Ensure required fields exist on each match
+        for m in matches:
+            m.setdefault("match_type", "new")
+            m.setdefault("suggested_action", "create" if m["match_type"] == "new" else "skip")
+            m.setdefault("confidence", 0.9 if m["match_type"] != "new" else 0.5)
+    except Exception as e:
+        logging.warning(f"Dedup parse error: {e} — raw: {raw[:200]}")
+        matches = [{"proposed_title": t.title, "match_type": "new", "suggested_action": "create", "confidence": 1.0, "suggestion": "Could not analyse — treating as new."} for t in payload.proposed_tasks]
 
     duplicates = sum(1 for m in matches if m.get("match_type") == "duplicate")
     updates = sum(1 for m in matches if m.get("match_type") == "update")
