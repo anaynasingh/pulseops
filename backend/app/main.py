@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics
+from app.api.v1.mcp_server import mcp
 
 app = FastAPI(
     title="PulseOps API",
@@ -45,6 +46,10 @@ app.include_router(kanban.router, prefix=PREFIX)
 app.include_router(ai.router, prefix=PREFIX)
 app.include_router(search.router, prefix=PREFIX)
 app.include_router(analytics.router, prefix=PREFIX)
+
+
+# Mount MCP server — Claude connects via: claude mcp add task-planner <URL>/mcp
+app.mount("/mcp", mcp.streamable_http_app())
 
 
 @app.get("/health")
