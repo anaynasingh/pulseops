@@ -16,7 +16,7 @@ const NAV_ITEMS = [
   { href: "/analytics",  icon: "◈", label: "Analytics" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
@@ -26,7 +26,7 @@ export function Sidebar() {
   if (!sidebarOpen) return null;
 
   return (
-    <aside className="w-60 h-screen bg-[#080f20] border-r border-slate-800/60 flex flex-col shrink-0 overflow-y-auto">
+    <aside className="w-64 h-screen bg-[#080f20] border-r border-slate-800/60 flex flex-col shrink-0 overflow-y-auto">
       {/* Logo */}
       <div className="px-4 py-4 border-b border-slate-800/60">
         <div className="flex items-center gap-2">
@@ -60,6 +60,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavClick}
               className={cn(
                 "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-smooth",
                 active

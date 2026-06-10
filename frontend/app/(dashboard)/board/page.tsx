@@ -37,7 +37,7 @@ export default function BoardPage() {
       />
 
       {/* Filters bar */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-slate-800/60 shrink-0">
+      <div className="flex items-center gap-2 md:gap-3 px-3 md:px-6 py-3 border-b border-slate-800/60 shrink-0 overflow-x-auto">
         {/* Mine / All toggle */}
         <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 shrink-0">
           <button
@@ -81,7 +81,7 @@ export default function BoardPage() {
           ))}
         </select>
 
-        <div className="text-xs text-slate-600 ml-auto">
+        <div className="text-xs text-slate-600 ml-auto hidden md:block shrink-0">
           {scope === "mine" ? `Showing your projects` : "Showing all team projects"}
         </div>
       </div>

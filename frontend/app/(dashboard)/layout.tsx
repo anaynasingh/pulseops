@@ -11,19 +11,25 @@ import { ReminderModal } from "@/components/layout/ReminderModal";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, _hasHydrated } = useAuthStore();
-  const { aiAssistantOpen, commandPaletteOpen, toggleCommandPalette, theme } = useUIStore();
+  const { aiAssistantOpen, commandPaletteOpen, toggleCommandPalette, theme, sidebarOpen, setSidebarOpen } = useUIStore();
   const { enabled: reminderEnabled, intervalMin, snoozedUntil, show: showReminder } = useReminderStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auth guard — wait for Zustand to rehydrate from localStorage before redirecting.
-  // Without this check, on page refresh user is briefly null while the stored token
-  // loads, causing a spurious redirect to /login.
   useEffect(() => {
-    if (!_hasHydrated) return;   // still loading from localStorage — wait
-    if (!user) {
-      router.replace("/login");
-    }
+    if (!_hasHydrated) return;
+    if (!user) router.replace("/login");
   }, [user, _hasHydrated, router]);
+
+  // On small screens, default sidebar to closed
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) setSidebarOpen(false);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [setSidebarOpen]);
 
   // Hourly reminder timer
   useEffect(() => {
@@ -37,7 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [reminderEnabled, intervalMin, snoozedUntil, showReminder]);
 
-  // Global Cmd+K / Ctrl+K shortcut
+  // Global Cmd+K / Ctrl+K
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -49,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener("keydown", handler);
   }, [toggleCommandPalette]);
 
-  // Show spinner while Zustand rehydrates — prevents flash redirect
+  // Loading spinner while Zustand rehydrates
   if (!_hasHydrated) {
     return (
       <div className="flex h-screen items-center justify-center bg-white">
@@ -63,10 +69,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
+  const isMobileOpen = sidebarOpen;
+
   return (
     <div className="flex h-screen overflow-hidden" data-theme={theme}>
-      <Sidebar />
-      <main className="flex-1 flex flex-col overflow-hidden">
+
+      {/* Mobile backdrop — tap to close sidebar */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — off-canvas on mobile, fixed on desktop */}
+      <div className={`
+        fixed md:relative inset-y-0 left-0 z-30
+        transition-transform duration-300 ease-in-out
+        ${isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+        ${!isMobileOpen ? "md:flex" : "flex"}
+      `}>
+        <Sidebar onNavClick={() => { if (window.innerWidth < 768) setSidebarOpen(false); }} />
+      </div>
+
+      {/* Main content */}
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
         {children}
       </main>
 

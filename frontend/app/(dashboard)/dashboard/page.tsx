@@ -43,7 +43,7 @@ export default function DashboardPage() {
         actions={
           <div className="flex items-center gap-2">
             {/* Mine / Team toggle */}
-            <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5">
+            <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 shrink-0">
               <button
                 onClick={() => setView("mine")}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
@@ -69,13 +69,13 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+      <div className="flex-1 overflow-y-auto px-3 md:px-6 py-4 md:py-5 space-y-4 md:space-y-6">
 
         {/* ── MY VIEW ── */}
         {view === "mine" && (
           <>
             {/* Personal stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
                 { label: "My Tasks",      value: myData?.stats?.my_total_tasks    ?? 0, icon: "✓", color: "bg-indigo-500" },
                 { label: "High Priority", value: myData?.stats?.my_high_priority  ?? 0, icon: "🔥", color: "bg-red-500" },
@@ -120,9 +120,9 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-5">
               {/* My tasks — 2 cols */}
-              <div className="lg:col-span-2 space-y-5">
+              <div className="xl:col-span-2 space-y-4 md:space-y-5">
                 <MyTasksList tasks={myData?.my_tasks ?? []} loading={myLoading} />
                 <ActivityFeed activities={myData?.my_activity ?? []} loading={myLoading} title="My Recent Activity" />
               </div>
