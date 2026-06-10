@@ -8,8 +8,10 @@ import type { User, Project } from "./types";
 interface AuthState {
   user: User | null;
   token: string | null;
+  _hasHydrated: boolean;
   setAuth: (user: User, token: string) => void;
   clearAuth: () => void;
+  setHasHydrated: (v: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -17,6 +19,7 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
+      _hasHydrated: false,
       setAuth: (user, token) => {
         if (typeof window !== "undefined") {
           localStorage.setItem("pulseops_token", token);
@@ -29,8 +32,15 @@ export const useAuthStore = create<AuthState>()(
         }
         set({ user: null, token: null });
       },
+      setHasHydrated: (v) => set({ _hasHydrated: v }),
     }),
-    { name: "pulseops-auth" }
+    {
+      name: "pulseops-auth",
+      onRehydrateStorage: () => (state) => {
+        // Fires once localStorage has been read — safe to check user now
+        state?.setHasHydrated(true);
+      },
+    }
   )
 );
 
