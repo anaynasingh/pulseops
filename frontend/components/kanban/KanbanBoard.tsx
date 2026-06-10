@@ -33,7 +33,7 @@ interface KanbanBoardProps {
 // drop in the wrong column.
 const kanbanCollision: CollisionDetection = (args) => {
   // 1. Check if pointer is directly over a column first
-  const columnIds = new Set(KANBAN_COLUMNS.map((c) => c.id));
+  const columnIds = new Set<string>(KANBAN_COLUMNS.map((c) => c.id));
   const columnContainers = args.droppableContainers.filter((c) =>
     columnIds.has(String(c.id))
   );
