@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore, useUIStore, useReminderStore } from "@/lib/store";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -12,7 +12,8 @@ import { ClaudeSetupModal } from "@/components/layout/ClaudeSetupModal";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, _hasHydrated } = useAuthStore();
-  const { aiAssistantOpen, commandPaletteOpen, toggleCommandPalette, theme, sidebarOpen, setSidebarOpen, claudeSetupSeen, setClaudeSetupSeen } = useUIStore();
+  const { aiAssistantOpen, commandPaletteOpen, toggleCommandPalette, theme, sidebarOpen, setSidebarOpen } = useUIStore();
+  const [sessionSkipped, setSessionSkipped] = useState(false);
   const { enabled: reminderEnabled, intervalMin, snoozedUntil, show: showReminder } = useReminderStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -102,11 +103,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {commandPaletteOpen && <CommandPalette />}
       <ReminderModal />
 
-      {/* Claude setup onboarding — shown once per device after first login */}
-      {_hasHydrated && user && !claudeSetupSeen && (
+      {/* Claude setup onboarding — shown every login until user marks as done */}
+      {_hasHydrated && user && !user.mcp_setup_done && !sessionSkipped && (
         <ClaudeSetupModal
           userName={user.name}
-          onDismiss={setClaudeSetupSeen}
+          onDone={() => setSessionSkipped(true)}
+          onSkip={() => setSessionSkipped(true)}
         />
       )}
     </div>

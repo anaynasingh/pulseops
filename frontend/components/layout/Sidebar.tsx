@@ -84,20 +84,30 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Connect Claude */}
+      {/* Claude connection status */}
       <div className="px-3 py-2 border-t border-slate-800/60">
         <button
           onClick={() => setShowClaudeSetup(true)}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-smooth"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-800/50 transition-smooth group"
+          title={user?.mcp_setup_done ? "Claude connected — click to view setup guide" : "Claude not connected — click to set up"}
         >
-          <span className="text-base leading-none ai-pulse">✦</span>
-          <span className="text-xs">Connect Claude</span>
-          <span className="ml-auto text-[10px] text-indigo-400 bg-indigo-950 border border-indigo-800 rounded px-1.5 py-0.5">setup</span>
+          {/* Status dot */}
+          <span className={`w-2 h-2 rounded-full shrink-0 ${user?.mcp_setup_done ? "bg-green-400" : "bg-amber-400 animate-pulse"}`} />
+          <span className={`text-xs ${user?.mcp_setup_done ? "text-green-400" : "text-amber-400"}`}>
+            Claude {user?.mcp_setup_done ? "connected" : "not connected"}
+          </span>
+          <span className="ml-auto text-[10px] text-slate-600 group-hover:text-slate-400 transition-colors">
+            {user?.mcp_setup_done ? "guide" : "setup →"}
+          </span>
         </button>
       </div>
 
       {showClaudeSetup && user && (
-        <ClaudeSetupModal userName={user.name} onDismiss={() => setShowClaudeSetup(false)} />
+        <ClaudeSetupModal
+          userName={user.name}
+          onDone={() => setShowClaudeSetup(false)}
+          onSkip={() => setShowClaudeSetup(false)}
+        />
       )}
 
       {/* Light / Dark mode toggle */}

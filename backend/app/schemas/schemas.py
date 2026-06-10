@@ -40,6 +40,7 @@ class UserOut(BaseModel):
     role: UserRole
     avatar_url: Optional[str] = None
     is_active: bool
+    mcp_setup_done: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

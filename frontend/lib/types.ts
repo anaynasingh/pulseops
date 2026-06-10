@@ -15,6 +15,7 @@ export interface User {
   role: UserRole;
   avatar_url?: string;
   is_active: boolean;
+  mcp_setup_done: boolean;
   created_at: string;
 }
 

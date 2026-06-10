@@ -32,6 +32,8 @@ export const authApi = {
   signup: (email: string, name: string, password: string) =>
     api.post("/auth/signup", { email, name, password }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
+  mcpComplete: () => api.post("/auth/mcp-complete").then((r) => r.data),
+  mcpReset: () => api.post("/auth/mcp-reset").then((r) => r.data),
 };
 
 // ── Projects ──────────────────────────────────────────────────────────────────

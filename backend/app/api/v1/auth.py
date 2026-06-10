@@ -6,6 +6,7 @@ from app.models.models import User
 from app.schemas.schemas import LoginRequest, SignupRequest, TokenResponse, UserOut
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.deps import get_current_user
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -46,4 +47,28 @@ async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)):
+    return UserOut.model_validate(current_user)
+
+
+@router.post("/mcp-complete", response_model=UserOut)
+async def mcp_complete(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark Claude/MCP setup as completed for this user."""
+    current_user.mcp_setup_done = True
+    await db.commit()
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.post("/mcp-reset", response_model=UserOut)
+async def mcp_reset(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reset Claude/MCP setup so the guide shows again."""
+    current_user.mcp_setup_done = False
+    await db.commit()
+    await db.refresh(current_user)
     return UserOut.model_validate(current_user)
