@@ -553,16 +553,20 @@ class _IntentOutput(BaseModel):
     proposed_tasks: Optional[List[dict]] = None  # for multi-task proposals
 
 
-_INTENT_SYSTEM = """You are an intent classifier for a project management assistant.
+_INTENT_SYSTEM = """You are an intent classifier for a team project management assistant called PulseOps.
+
 Classify the user message into one of these intents:
 - create_project: user wants to create a new project
 - create_task: user wants to create a task (possibly within a project)
-- query: user is asking a question about their workspace
-- summarize: user wants a summary
+- query: user is asking a question about their workspace, projects, tasks, meetings, team, or workload
+- summarize: user wants a summary of projects, tasks, or activity
 
-Also extract:
-- title: a short clear title (max 8 words) for the project or task if applicable
-- description: a brief description of what needs to be done (1-2 sentences)
+If the message is NOT related to project management, task tracking, team work, meetings, or the app itself, classify as:
+- off_topic: anything unrelated — general knowledge, coding help, math, writing essays, recipes, jokes, weather, news, etc.
+
+Also extract (for create_project / create_task only):
+- title: a short clear title (max 8 words)
+- description: a brief description (1-2 sentences)
 - priority: low, medium, high, or urgent (infer from context; default medium)
 - project_title: the name of the project the task belongs to (for create_task only)
 
@@ -599,6 +603,14 @@ async def ai_chat(
     )
 
     # ── Step 2: act on intent ─────────────────────────────────────────────────
+
+    # Refuse off-topic questions immediately — no LLM call needed
+    if intent_result.intent == "off_topic":
+        return {
+            "reply": "I'm focused on your team's projects and tasks — I can't help with that here. "
+                     "Try asking me about your projects, tasks, meetings, priorities, or team workload.",
+            "action": "off_topic",
+        }
 
     if intent_result.intent == "create_project":
         priority = intent_result.priority or "medium"
@@ -672,9 +684,19 @@ async def ai_chat(
                 context += f" | BLOCKED: {p.blockers}"
             context += "\n"
 
-    CHAT_SYSTEM = """You are PulseOps AI, an intelligent assistant in a project management platform.
-You can see the user's workspace. Answer their question directly and concisely.
-Be specific. Use bullet points where helpful. Max 150 words."""
+    CHAT_SYSTEM = """You are PulseOps AI, an assistant built exclusively for project and task management.
+You have access to the user's workspace data below.
+
+Your scope is strictly limited to:
+- Projects, tasks, deadlines, priorities, and blockers
+- Team workload and assignments
+- Meeting outcomes and action items
+- Workspace summaries and status updates
+
+If asked anything outside this scope (general knowledge, coding, writing, math, recipes, news, etc.)
+respond with: "I'm focused on your team's work — I can't help with that here."
+
+Answer questions about the workspace directly and concisely. Use bullet points where helpful. Max 150 words."""
 
     answer = await chat_completion(
         system_prompt=f"{CHAT_SYSTEM}\n\nContext:\n{context}",
