@@ -164,6 +164,7 @@ export interface DashboardStats {
   high_priority_projects: Project[];
   stale_projects: Project[];
   ai_insights: AIInsight[];
+  priority_distribution: Record<string, number>;
 }
 
 // Kanban column definitions

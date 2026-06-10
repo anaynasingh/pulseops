@@ -436,6 +436,7 @@ class DashboardStats(BaseModel):
     high_priority_projects: List[ProjectOut]
     stale_projects: List[ProjectOut]
     ai_insights: List[AIInsightOut]
+    priority_distribution: dict = {}
 
 
 # Allow forward references

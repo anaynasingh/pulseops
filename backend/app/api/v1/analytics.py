@@ -32,6 +32,14 @@ async def get_dashboard(
     total_res = await db.execute(select(func.count()).select_from(Project))
     total = total_res.scalar()
 
+    # Priority distribution across ALL projects (used by analytics page)
+    priority_counts_res = await db.execute(
+        select(Project.priority, func.count(Project.id).label("cnt"))
+        .where(Project.status.notin_([ProjectStatus.done]))
+        .group_by(Project.priority)
+    )
+    priority_distribution = {row.priority.value: row.cnt for row in priority_counts_res}
+
     active_res = await db.execute(
         select(func.count()).select_from(Project).where(
             Project.status.in_([ProjectStatus.in_progress, ProjectStatus.review])
@@ -111,17 +119,21 @@ async def get_dashboard(
     )
     insights = [AIInsightOut.model_validate(i) for i in insights_res.scalars().all()]
 
-    # Team workload (count projects per owner)
+    # Team workload — count projects each user is involved in
+    # (owns OR has at least one task assigned)
+    from sqlalchemy import distinct
     workload_res = await db.execute(
-        select(User.name, User.id, func.count(Project.id).label("count"))
-        .join(Project, Project.owner_id == User.id)
+        select(User.name, User.id, func.count(distinct(Project.id)).label("count"))
+        .join(Task, Task.assigned_to == User.id)
+        .join(Project, Project.id == Task.project_id)
         .where(Project.status.notin_([ProjectStatus.done]))
         .group_by(User.id, User.name)
-        .order_by(func.count(Project.id).desc())
+        .order_by(func.count(distinct(Project.id)).desc())
     )
     team_workload = [
         {"user_id": str(row.id), "name": row.name, "project_count": row.count}
         for row in workload_res
+        if row.count > 0
     ]
 
     return DashboardStats(
@@ -136,6 +148,7 @@ async def get_dashboard(
         high_priority_projects=high_priority,
         stale_projects=stale,
         ai_insights=insights,
+        priority_distribution=priority_distribution,
     )
 
 
