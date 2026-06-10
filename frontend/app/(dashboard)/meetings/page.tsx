@@ -92,8 +92,8 @@ export default function MeetingsPage() {
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <div className="max-w-3xl mx-auto space-y-5">
 
-          {/* ── Graph API Diagnostics panel ── */}
-          {diagnostics && (
+          {/* ── Graph API Diagnostics panel — always shown ── */}
+          {true && (
             <div className="bg-[#0f1629] border border-slate-800 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -112,10 +112,10 @@ export default function MeetingsPage() {
               {/* Stats row */}
               <div className="grid grid-cols-4 gap-3 mb-4">
                 {[
-                  { label: "Total searches", value: diagnostics.summary?.total ?? 0, color: "text-white" },
-                  { label: "Correct", value: diagnostics.summary?.correct ?? 0, color: "text-green-400" },
-                  { label: "Wrong", value: diagnostics.summary?.wrong ?? 0, color: "text-red-400" },
-                  { label: "Accuracy", value: `${diagnostics.accuracy_pct ?? 0}%`, color: (diagnostics.accuracy_pct ?? 0) >= 80 ? "text-green-400" : (diagnostics.accuracy_pct ?? 0) >= 50 ? "text-amber-400" : "text-red-400" },
+                  { label: "Total searches", value: diagnostics?.summary?.total ?? 0, color: "text-white" },
+                  { label: "Correct", value: diagnostics?.summary?.correct ?? 0, color: "text-green-400" },
+                  { label: "Wrong", value: diagnostics?.summary?.wrong ?? 0, color: "text-red-400" },
+                  { label: "Accuracy", value: `${diagnostics?.accuracy_pct ?? 0}%`, color: (diagnostics?.accuracy_pct ?? 0) >= 80 ? "text-green-400" : (diagnostics?.accuracy_pct ?? 0) >= 50 ? "text-amber-400" : "text-red-400" },
                 ].map(s => (
                   <div key={s.label} className="bg-slate-900/60 rounded-lg p-3 text-center">
                     <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -136,19 +136,19 @@ export default function MeetingsPage() {
                       (diagnostics.accuracy_pct ?? 0) >= 80 ? "bg-green-500" :
                       (diagnostics.accuracy_pct ?? 0) >= 50 ? "bg-amber-500" : "bg-red-500"
                     }`}
-                    style={{ width: `${diagnostics.accuracy_pct ?? 0}%` }}
+                    style={{ width: `${diagnostics?.accuracy_pct ?? 0}%` }}
                   />
                 </div>
               </div>
 
               {/* Wrong cases */}
-              {(diagnostics.wrong_cases?.length ?? 0) > 0 ? (
+              {(diagnostics?.wrong_cases?.length ?? 0) > 0 ? (
                 <div>
                   <p className="text-[11px] text-red-400 uppercase tracking-wide font-medium mb-2">
-                    Wrong cases ({diagnostics.wrong_cases.length})
+                    Wrong cases ({diagnostics?.wrong_cases?.length})
                   </p>
                   <div className="space-y-2">
-                    {diagnostics.wrong_cases.map((c: any, i: number) => (
+                    {diagnostics?.wrong_cases?.map((c: any, i: number) => (
                       <div key={i} className="bg-red-950/20 border border-red-900/30 rounded-lg p-3">
                         <div className="flex items-start gap-2">
                           <span className="text-red-400 text-xs shrink-0 mt-0.5">✗</span>
@@ -169,13 +169,13 @@ export default function MeetingsPage() {
                       </div>
                     ))}
                   </div>
-                  {diagnostics.wrong_cases.length >= 3 && (
+                  {(diagnostics?.wrong_cases?.length ?? 0) >= 3 && (
                     <p className="text-[11px] text-indigo-400 mt-3">
                       💡 Ask Claude: <em>"Look at the transcript diagnostics and find the pattern in these wrong results"</em>
                     </p>
                   )}
                 </div>
-              ) : (diagnostics.summary?.total ?? 0) > 0 ? (
+              ) : (diagnostics?.summary?.total ?? 0) > 0 ? (
                 <p className="text-xs text-green-400 flex items-center gap-1.5">
                   <span>✓</span> All transcript searches have been correct so far
                 </p>
