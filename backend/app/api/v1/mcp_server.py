@@ -19,7 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.session import AsyncSessionLocal
 from app.models.models import (
-    Project, Task, ProjectStatus, PriorityLevel, User,
+    Project, Task, ProjectStatus, PriorityLevel, User, TranscriptSearchLog,
 )
 from app.core.security import verify_password
 
@@ -315,6 +315,101 @@ async def update_task_status(
         await db.commit()
 
     return f"✅ **{task.title}**: {old} → {new_status}"
+
+
+@mcp.tool()
+async def log_transcript_search(
+    searched_for: str,
+    got_back: str,
+    was_correct: bool,
+    x_email: Optional[str] = None,
+    x_password: Optional[str] = None,
+    note: Optional[str] = None,
+    attendees: Optional[str] = None,
+    meeting_date: Optional[str] = None,
+) -> str:
+    """
+    Log whether Microsoft Graph returned the right meeting transcript.
+    Call this EVERY TIME you fetch a transcript via the M365 connector.
+
+    searched_for: what you asked for (e.g. 'June 10 dev meeting 9am')
+    got_back: what Graph actually returned (meeting title/date)
+    was_correct: True if it was the right transcript, False if wrong
+    note: if wrong, describe what was off (e.g. 'got last week meeting instead')
+    attendees: comma-separated list of attendees in the returned transcript
+    meeting_date: date of the meeting that was returned (YYYY-MM-DD)
+
+    This builds a dataset so we can find the pattern in Graph API errors.
+    Mark: 'It shouldn't be entirely random — maybe there's a pattern.'
+    """
+    user = await _authenticate(x_email, x_password)
+
+    async with AsyncSessionLocal() as db:
+        log = TranscriptSearchLog(
+            user_id=user.id if user else None,
+            search_query=searched_for,
+            returned_title=got_back,
+            returned_date=meeting_date,
+            returned_attendees=[a.strip() for a in (attendees or "").split(",") if a.strip()],
+            source="mcp",
+            was_correct=was_correct,
+            correction_note=note,
+        )
+        db.add(log)
+        await db.commit()
+
+    status = "correct" if was_correct else "WRONG"
+    msg = f"Logged [{status}]: searched '{searched_for}', got '{got_back}'"
+    if not was_correct and note:
+        msg += f" — note: {note}"
+    return msg
+
+
+@mcp.tool()
+async def get_transcript_diagnostics(
+    x_email: Optional[str] = None,
+    x_password: Optional[str] = None,
+) -> str:
+    """
+    Show a diagnostic report of all transcript searches — accuracy rate,
+    wrong cases, patterns. Use this to analyse why Graph returns wrong meetings.
+    """
+    user = await _authenticate(x_email, x_password)
+    if not user:
+        return _auth_error()
+
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import select as sa_select
+        result = await db.execute(
+            sa_select(TranscriptSearchLog)
+            .order_by(TranscriptSearchLog.created_at.desc())
+            .limit(50)
+        )
+        logs = result.scalars().all()
+
+    total = len(logs)
+    correct = sum(1 for l in logs if l.was_correct is True)
+    wrong = sum(1 for l in logs if l.was_correct is False)
+    unreviewed = sum(1 for l in logs if l.was_correct is None)
+    acc = round((correct / max(correct + wrong, 1)) * 100)
+
+    lines = [
+        f"**Transcript Search Diagnostics** ({total} total searches)",
+        f"Accuracy: {acc}% | Correct: {correct} | Wrong: {wrong} | Unreviewed: {unreviewed}",
+        "",
+    ]
+
+    wrong_cases = [l for l in logs if l.was_correct is False]
+    if wrong_cases:
+        lines.append(f"**Wrong cases ({len(wrong_cases)}):**")
+        for l in wrong_cases:
+            lines.append(f"  • Searched: '{l.search_query}' → Got: '{l.returned_title}' | {l.returned_date or '?'}")
+            if l.correction_note:
+                lines.append(f"    Note: {l.correction_note}")
+    else:
+        lines.append("No wrong cases logged yet.")
+
+    return "\n".join(lines)
 
 
 @mcp.tool()

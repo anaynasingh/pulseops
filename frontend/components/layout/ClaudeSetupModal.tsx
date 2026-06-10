@@ -100,7 +100,7 @@ const STEPS = [
         <p className="text-sm text-slate-600 font-medium">Try saying these to Claude Code:</p>
         <div className="space-y-2">
           {[
-            "Summarise today's dev meeting and add action items to my task planner",
+            "Summarise today's dev meeting, add action items to my task planner, then log whether you got the right transcript",
             "What are my overdue tasks in the task planner?",
             "Add a high priority task: Fix the CORS bug in Task Planner",
             "Mark the 'Fix session persistence' task as complete",
