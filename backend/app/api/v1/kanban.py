@@ -41,6 +41,10 @@ async def move_project(
     await db.commit()
     await db.refresh(project)
 
+    # Bust the kanban cache so the next board load reflects the move
+    from app.api.v1.projects import _kanban_cache
+    _kanban_cache.clear()
+
     result = await db.execute(
         select(Project)
         .options(selectinload(Project.owner), selectinload(Project.tasks).selectinload(Task.assignee),

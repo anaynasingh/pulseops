@@ -88,7 +88,8 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectKanbanOut(BaseModel):
-    """Slim project schema for the Kanban board — no nested task lists."""
+    """Slim project schema for the Kanban board — no nested task lists.
+    Excludes tasks/insights/health_records to avoid async lazy-load errors."""
     id: UUID
     title: str
     description: Optional[str] = None
@@ -106,9 +107,39 @@ class ProjectKanbanOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     owner: Optional["UserOut"] = None
-    tasks: List = []          # empty — not loaded in kanban view
+    # These are intentionally absent — the Kanban board doesn't need them
+    # and loading them costs 3-5 seconds due to multiple Supabase round trips
+    tasks: List = []
     insights: List = []
     health_records: List = []
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """Override to manually build dict, avoiding SQLAlchemy lazy-load on relationships."""
+        data = {
+            "id": obj.id,
+            "title": obj.title,
+            "description": obj.description,
+            "status": obj.status,
+            "priority": obj.priority,
+            "owner_id": obj.owner_id,
+            "progress_pct": obj.progress_pct,
+            "due_date": obj.due_date,
+            "tags": obj.tags or [],
+            "stakeholders": obj.stakeholders or [],
+            "blockers": obj.blockers,
+            "health_score": obj.health_score,
+            "latest_update": obj.latest_update,
+            "kanban_order": obj.kanban_order,
+            "created_at": obj.created_at,
+            "updated_at": obj.updated_at,
+            "owner": None,  # not loaded in kanban view for speed
+            "tasks": [],
+            "insights": [],
+            "health_records": [],
+        }
+        return cls(**data)
+
     model_config = {"from_attributes": True}
 
 

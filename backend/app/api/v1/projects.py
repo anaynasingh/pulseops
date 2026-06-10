@@ -4,12 +4,19 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
+import time
 from app.db.session import get_db
 from app.models.models import Project, Task, ActivityLog, ProjectStatus, PriorityLevel, User
 from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectKanbanOut
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+# ── Simple in-memory cache for kanban endpoint ────────────────────────────────
+# Supabase is in Sydney — each round trip adds 200-400ms latency.
+# Cache the kanban board for 30 seconds so navigating back is instant.
+_kanban_cache: dict = {}   # key: (owner_id, status, priority) → (timestamp, data)
+_CACHE_TTL = 30             # seconds
 
 
 async def _log_activity(db: AsyncSession, entity_id: UUID, user_id: UUID,
@@ -35,9 +42,13 @@ async def list_projects_kanban(
     current_user: User = Depends(get_current_user),
 ):
     """Slim endpoint for the Kanban board — loads only project metadata, no nested relations."""
+    cache_key = (str(owner_id), str(status), str(priority))
+    cached = _kanban_cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < _CACHE_TTL:
+        return cached[1]   # serve from cache — instant
+
     query = (
         select(Project)
-        .options(selectinload(Project.owner))   # just owner name for avatar
         .order_by(Project.kanban_order, Project.updated_at.desc())
     )
     if status:
@@ -49,7 +60,10 @@ async def list_projects_kanban(
         query = query.where(or_(Project.owner_id == owner_id, Project.id.in_(assigned_ids)))
     query = query.limit(limit)
     result = await db.execute(query)
-    return [ProjectKanbanOut.model_validate(p) for p in result.scalars().all()]
+    projects = [ProjectKanbanOut.model_validate(p) for p in result.scalars().all()]
+
+    _kanban_cache[cache_key] = (time.time(), projects)   # store in cache
+    return projects
 
 
 @router.get("/", response_model=List[ProjectOut])
