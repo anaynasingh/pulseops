@@ -50,11 +50,13 @@ interface UIState {
   aiAssistantOpen: boolean;
   activeProjectId: string | null;
   theme: "dark" | "light";
+  claudeSetupSeen: boolean;
   setSidebarOpen: (v: boolean) => void;
   toggleCommandPalette: () => void;
   toggleAIAssistant: () => void;
   setActiveProject: (id: string | null) => void;
   toggleTheme: () => void;
+  setClaudeSetupSeen: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -65,13 +67,15 @@ export const useUIStore = create<UIState>()(
       aiAssistantOpen: false,
       activeProjectId: null,
       theme: "light",
+      claudeSetupSeen: false,
       setSidebarOpen: (v) => set({ sidebarOpen: v }),
       toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
       toggleAIAssistant: () => set((s) => ({ aiAssistantOpen: !s.aiAssistantOpen })),
       setActiveProject: (id) => set({ activeProjectId: id }),
       toggleTheme: () => set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
+      setClaudeSetupSeen: () => set({ claudeSetupSeen: true }),
     }),
-    { name: "pulseops-ui", partialize: (s) => ({ theme: s.theme }) }
+    { name: "pulseops-ui", partialize: (s) => ({ theme: s.theme, claudeSetupSeen: s.claudeSetupSeen }) }
   )
 );
 

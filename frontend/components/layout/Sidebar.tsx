@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore, useUIStore, useReminderStore } from "@/lib/store";
+import { ClaudeSetupModal } from "@/components/layout/ClaudeSetupModal";
+import { useState } from "react";
 import { cn, initials } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -21,6 +23,7 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
   const { sidebarOpen, toggleCommandPalette, theme, toggleTheme } = useUIStore();
+  const [showClaudeSetup, setShowClaudeSetup] = useState(false);
   const { enabled: reminderEnabled, intervalMin, setEnabled: setReminderEnabled, setIntervalMin, show } = useReminderStore();
 
   if (!sidebarOpen) return null;
@@ -80,6 +83,22 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Connect Claude */}
+      <div className="px-3 py-2 border-t border-slate-800/60">
+        <button
+          onClick={() => setShowClaudeSetup(true)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-smooth"
+        >
+          <span className="text-base leading-none ai-pulse">✦</span>
+          <span className="text-xs">Connect Claude</span>
+          <span className="ml-auto text-[10px] text-indigo-400 bg-indigo-950 border border-indigo-800 rounded px-1.5 py-0.5">setup</span>
+        </button>
+      </div>
+
+      {showClaudeSetup && user && (
+        <ClaudeSetupModal userName={user.name} onDismiss={() => setShowClaudeSetup(false)} />
+      )}
 
       {/* Light / Dark mode toggle */}
       <div className="px-3 py-2 border-t border-slate-800/60">
