@@ -70,17 +70,19 @@ const STEPS = [
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800 font-medium">
           ✨ No cloning, no Python setup — just one command.
         </div>
-        <p className="text-sm text-slate-600">In your terminal, run:</p>
+        <p className="text-sm text-slate-600">In your terminal, run this one command (swap in your own email and password):</p>
         <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs text-green-400 select-all leading-relaxed">
           claude mcp add task-planner \{"\n"}
-          {"  "}https://backend-production-ff8e.up.railway.app/mcp
+          {"  "}https://backend-production-ff8e.up.railway.app/mcp \{"\n"}
+          {'  --header "X-Email: you@prospect33.com" \\'}{"\n"}
+          {'  --header "X-Password: YourPassword"'}
         </div>
-        <p className="text-sm text-slate-600">That&apos;s it. Then restart Claude Code and you&apos;ll see <strong>task-planner</strong> in your MCP tools list.</p>
+        <p className="text-sm text-slate-600">Restart Claude Code — you&apos;ll see <strong>task-planner</strong> in your MCP tools.</p>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-          <strong>How it works:</strong> The MCP server is built into the Task Planner backend — nothing runs on your machine. Claude connects to it directly over the internet.
+          <strong>Why credentials?</strong> So Claude only sees YOUR tasks. The MCP server is hosted — nothing runs on your machine.
         </div>
         <div className="space-y-1.5 pt-1">
-          <p className="text-xs font-medium text-slate-600">Verify it&apos;s working — say this to Claude:</p>
+          <p className="text-xs font-medium text-slate-600">Verify it works — say this to Claude:</p>
           <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 text-xs text-indigo-800 italic">
             &ldquo;List my tasks in the task planner&rdquo;
           </div>
