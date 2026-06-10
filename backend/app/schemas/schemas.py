@@ -87,6 +87,31 @@ class ProjectUpdate(BaseModel):
     kanban_order: Optional[int] = None
 
 
+class ProjectKanbanOut(BaseModel):
+    """Slim project schema for the Kanban board — no nested task lists."""
+    id: UUID
+    title: str
+    description: Optional[str] = None
+    status: ProjectStatus
+    priority: PriorityLevel
+    owner_id: Optional[UUID] = None
+    progress_pct: int
+    due_date: Optional[date] = None
+    tags: List[str] = []
+    stakeholders: List[str] = []
+    blockers: Optional[str] = None
+    health_score: int = 100
+    latest_update: Optional[str] = None
+    kanban_order: int = 0
+    created_at: datetime
+    updated_at: datetime
+    owner: Optional["UserOut"] = None
+    tasks: List = []          # empty — not loaded in kanban view
+    insights: List = []
+    health_records: List = []
+    model_config = {"from_attributes": True}
+
+
 class ProjectOut(BaseModel):
     id: UUID
     title: str

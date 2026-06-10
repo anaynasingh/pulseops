@@ -128,13 +128,13 @@ export default function MeetingsPage() {
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[11px] text-slate-500">Accuracy rate</span>
-                  <span className="text-[11px] text-slate-400">{diagnostics.accuracy_pct ?? 0}%</span>
+                  <span className="text-[11px] text-slate-400">{diagnostics?.accuracy_pct ?? 0}%</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                   <div
                     className={`h-2 rounded-full transition-all ${
-                      (diagnostics.accuracy_pct ?? 0) >= 80 ? "bg-green-500" :
-                      (diagnostics.accuracy_pct ?? 0) >= 50 ? "bg-amber-500" : "bg-red-500"
+                      (diagnostics?.accuracy_pct ?? 0) >= 80 ? "bg-green-500" :
+                      (diagnostics?.accuracy_pct ?? 0) >= 50 ? "bg-amber-500" : "bg-red-500"
                     }`}
                     style={{ width: `${diagnostics?.accuracy_pct ?? 0}%` }}
                   />

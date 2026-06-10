@@ -18,11 +18,12 @@ export default function DashboardPage() {
   const isLight = theme === "light";
   const [view, setView] = useState<"mine" | "team">("mine");
 
-  // Personal dashboard
+  // Personal dashboard — cache for 2 min, refetch every 2 min (not 30s)
   const { data: myData, isLoading: myLoading } = useQuery({
     queryKey: ["my-dashboard"],
     queryFn: () => analyticsApi.myDashboard(),
-    refetchInterval: 30_000,
+    staleTime: 2 * 60_000,
+    refetchInterval: 2 * 60_000,
   });
 
   // Team dashboard

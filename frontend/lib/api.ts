@@ -47,6 +47,8 @@ export const usersApi = {
 export const projectsApi = {
   list: (params?: Record<string, unknown>) =>
     api.get("/projects/", { params }).then((r) => r.data),
+  listKanban: (params?: Record<string, unknown>) =>
+    api.get("/projects/kanban", { params }).then((r) => r.data),
   get: (id: string) => api.get(`/projects/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) =>
     api.post("/projects/", data).then((r) => r.data),

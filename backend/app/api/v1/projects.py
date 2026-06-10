@@ -6,7 +6,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.models import Project, Task, ActivityLog, ProjectStatus, PriorityLevel, User
-from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectOut
+from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectKanbanOut
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -23,6 +23,33 @@ async def _log_activity(db: AsyncSession, entity_id: UUID, user_id: UUID,
         new_value=new_val,
     )
     db.add(log)
+
+
+@router.get("/kanban", response_model=List[ProjectKanbanOut])
+async def list_projects_kanban(
+    status: Optional[ProjectStatus] = Query(None),
+    priority: Optional[PriorityLevel] = Query(None),
+    owner_id: Optional[UUID] = Query(None),
+    limit: int = Query(200, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Slim endpoint for the Kanban board — loads only project metadata, no nested relations."""
+    query = (
+        select(Project)
+        .options(selectinload(Project.owner))   # just owner name for avatar
+        .order_by(Project.kanban_order, Project.updated_at.desc())
+    )
+    if status:
+        query = query.where(Project.status == status)
+    if priority:
+        query = query.where(Project.priority == priority)
+    if owner_id:
+        assigned_ids = select(Task.project_id).where(Task.assigned_to == owner_id).scalar_subquery()
+        query = query.where(or_(Project.owner_id == owner_id, Project.id.in_(assigned_ids)))
+    query = query.limit(limit)
+    result = await db.execute(query)
+    return [ProjectKanbanOut.model_validate(p) for p in result.scalars().all()]
 
 
 @router.get("/", response_model=List[ProjectOut])

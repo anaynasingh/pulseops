@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, kanbanApi } from "@/lib/api";
+// Note: KanbanBoard uses the slim /projects/kanban endpoint (no nested task lists)
 import { useBoardStore } from "@/lib/store";
 import { KANBAN_COLUMNS } from "@/lib/types";
 import { KanbanColumn } from "./KanbanColumn";
@@ -53,16 +54,18 @@ export function KanbanBoard({ searchQuery, filterPriority, filterOwner }: Kanban
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // Fetch projects
+  // Fetch projects via slim kanban endpoint (no nested task lists — much faster)
   const { data: fetchedProjects } = useQuery<Project[]>({
-    queryKey: ["projects", searchQuery, filterPriority, filterOwner],
+    queryKey: ["projects-kanban", searchQuery, filterPriority, filterOwner],
     queryFn: () =>
-      projectsApi.list({
+      projectsApi.listKanban({
         q: searchQuery || undefined,
         priority: filterPriority || undefined,
         owner_id: filterOwner || undefined,
         limit: 200,
       }),
+    staleTime: 60_000,   // cache for 1 min — board data doesn't change every second
+    gcTime: 5 * 60_000,  // keep in memory for 5 mins
   });
 
   // Sync fetched projects into the board store
