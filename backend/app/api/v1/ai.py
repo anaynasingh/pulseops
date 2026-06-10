@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.models import (
     Project, Task, AIInsight, AISummary, RequestIntake, MeetingTranscript,
-    EmailIngestion, ProjectHealth, User, IntakeStatus
+    EmailIngestion, ProjectHealth, User, IntakeStatus, TranscriptSearchLog
 )
 import logging
 logger = logging.getLogger(__name__)
@@ -316,8 +316,25 @@ Transcript:
         uploaded_by=current_user.id,
     )
     db.add(record)
+
+    # Auto-log every transcript analysis for Graph API diagnostics
+    search_log = TranscriptSearchLog(
+        user_id=current_user.id,
+        search_query=payload.title,
+        returned_title=payload.title,
+        returned_date=str(payload.meeting_date) if payload.meeting_date else None,
+        returned_attendees=ai_output.attendees or [],
+        source=payload.source,
+        was_correct=None,  # user feedback added later via /transcript-feedback
+    )
+    db.add(search_log)
+
     await db.commit()
     await db.refresh(record)
+    await db.refresh(search_log)
+
+    # Store search_log ID on the transcript so feedback can reference it
+    record.meta_log_id = str(search_log.id) if hasattr(record, 'meta_log_id') else None
 
     background_tasks.add_task(
         embed_and_store_bg, "meeting", record.id,
@@ -326,6 +343,89 @@ Transcript:
     )
 
     return TranscriptOut.model_validate(record)
+
+
+class _TranscriptFeedbackRequest(BaseModel):
+    log_id: UUID
+    was_correct: bool
+    correction_note: Optional[str] = None  # "wrong date", "pulled last week's meeting", etc.
+
+
+@router.post("/transcript-feedback", response_model=dict)
+async def transcript_feedback(
+    payload: _TranscriptFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record whether the transcript search returned the right meeting.
+    This builds a dataset for diagnosing Microsoft Graph search issues."""
+    result = await db.execute(
+        select(TranscriptSearchLog).where(TranscriptSearchLog.id == payload.log_id)
+    )
+    log = result.scalar_one_or_none()
+    if not log:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Log entry not found")
+
+    log.was_correct = payload.was_correct
+    log.correction_note = payload.correction_note
+    await db.commit()
+
+    return {
+        "recorded": True,
+        "log_id": str(log.id),
+        "was_correct": log.was_correct,
+        "message": "Thanks — this helps us find the pattern in Graph API errors." if not payload.was_correct else "Great, logged.",
+    }
+
+
+@router.get("/transcript-search-diagnostics", response_model=dict)
+async def transcript_search_diagnostics(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all transcript search logs for Claude to diagnose Graph API patterns."""
+    result = await db.execute(
+        select(TranscriptSearchLog)
+        .order_by(TranscriptSearchLog.created_at.desc())
+        .limit(100)
+    )
+    logs = result.scalars().all()
+
+    total = len(logs)
+    correct = sum(1 for l in logs if l.was_correct is True)
+    wrong = sum(1 for l in logs if l.was_correct is False)
+    unreviewed = sum(1 for l in logs if l.was_correct is None)
+
+    wrong_logs = [
+        {
+            "id": str(l.id),
+            "searched_for": l.search_query,
+            "got_back": l.returned_title,
+            "date_returned": l.returned_date,
+            "source": l.source,
+            "note": l.correction_note,
+            "at": l.created_at.isoformat(),
+        }
+        for l in logs if l.was_correct is False
+    ]
+
+    return {
+        "summary": {"total": total, "correct": correct, "wrong": wrong, "unreviewed": unreviewed},
+        "accuracy_pct": round((correct / max(correct + wrong, 1)) * 100, 1),
+        "wrong_cases": wrong_logs,
+        "all_logs": [
+            {
+                "id": str(l.id),
+                "query": l.search_query,
+                "returned": l.returned_title,
+                "source": l.source,
+                "correct": l.was_correct,
+                "at": l.created_at.isoformat(),
+            }
+            for l in logs
+        ],
+    }
 
 
 @router.post("/transcript/{transcript_id}/create-tasks", response_model=dict, status_code=201)

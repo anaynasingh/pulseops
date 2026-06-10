@@ -286,6 +286,23 @@ class RequestIntake(Base):
     submitter: Mapped[Optional["User"]] = relationship("User", foreign_keys=[submitted_by])
 
 
+class TranscriptSearchLog(Base):
+    """Logs every meeting transcript search so we can diagnose Graph API issues."""
+    __tablename__ = "transcript_search_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    search_query: Mapped[Optional[str]] = mapped_column(Text, nullable=True)         # what was searched
+    returned_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True) # what Graph returned
+    returned_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)   # meeting date returned
+    returned_attendees: Mapped[List[str]] = mapped_column(ARRAY(String), default=list)
+    source: Mapped[str] = mapped_column(String(50), default="manual")                 # manual / graph / mcp
+    was_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)       # user feedback: right meeting?
+    correction_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)       # what was wrong
+    transcript_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class MeetingTranscript(Base):
     __tablename__ = "meeting_transcripts"
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { aiApi, projectsApi } from "@/lib/api";
+import { aiApi, projectsApi, api } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { PRIORITY_CONFIG } from "@/lib/types";
 import type { TranscriptResult, Project } from "@/lib/types";
@@ -17,6 +17,8 @@ export default function MeetingsPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [tasksCreated, setTasksCreated] = useState(false);
   const [createdCount, setCreatedCount] = useState(0);
+  const [feedbackGiven, setFeedbackGiven] = useState<boolean | null>(null);
+  const [searchLogId, setSearchLogId] = useState<string | null>(null);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["projects"],
@@ -26,13 +28,20 @@ export default function MeetingsPage() {
   const analyzeMutation = useMutation({
     mutationFn: () =>
       aiApi.extractTranscript({ title, raw_transcript: transcript, source }),
-    onSuccess: (data: TranscriptResult) => {
+    onSuccess: (data: TranscriptResult & { log_id?: string }) => {
       setResult(data);
-      // Pre-select all action items
       setSelectedIndices(new Set(data.action_items.map((_, i) => i)));
       setTasksCreated(false);
       setCreatedCount(0);
+      setFeedbackGiven(null);
+      setSearchLogId(data.log_id ?? null);
     },
+  });
+
+  const feedbackMutation = useMutation({
+    mutationFn: ({ correct, note }: { correct: boolean; note?: string }) =>
+      api.post("/ai/transcript-feedback", { log_id: searchLogId, was_correct: correct, correction_note: note || null }).then(r => r.data),
+    onSuccess: (_, vars) => setFeedbackGiven(vars.correct),
   });
 
   const createTasksMutation = useMutation({
@@ -143,6 +152,36 @@ export default function MeetingsPage() {
                 <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Summary</p>
                 <p className="text-sm text-slate-300 leading-relaxed">{result.summary}</p>
               </div>
+
+              {/* ── Transcript accuracy feedback ── */}
+              {searchLogId && (
+                <div className="flex items-center gap-3 py-2 px-3 rounded-lg border border-slate-700/60 bg-slate-900/40">
+                  <span className="text-xs text-slate-400 shrink-0">Was this the right meeting?</span>
+                  {feedbackGiven === null ? (
+                    <>
+                      <button
+                        onClick={() => feedbackMutation.mutate({ correct: true })}
+                        className="px-2.5 py-1 text-xs rounded-md bg-green-900/40 text-green-400 hover:bg-green-900/60 border border-green-800/40 transition-colors"
+                      >
+                        ✓ Yes
+                      </button>
+                      <button
+                        onClick={() => {
+                          const note = window.prompt("What was wrong? (e.g. 'wrong date', 'pulled last week meeting')");
+                          feedbackMutation.mutate({ correct: false, note: note ?? undefined });
+                        }}
+                        className="px-2.5 py-1 text-xs rounded-md bg-red-900/40 text-red-400 hover:bg-red-900/60 border border-red-800/40 transition-colors"
+                      >
+                        ✗ Wrong meeting
+                      </button>
+                    </>
+                  ) : feedbackGiven ? (
+                    <span className="text-xs text-green-400">✓ Logged as correct</span>
+                  ) : (
+                    <span className="text-xs text-amber-400">⚠ Logged as wrong — helps us fix Graph search</span>
+                  )}
+                </div>
+              )}
 
               {/* Attendees */}
               {result.attendees.length > 0 && (
