@@ -53,7 +53,16 @@ async def list_projects(
     if priority:
         query = query.where(Project.priority == priority)
     if owner_id:
-        query = query.where(Project.owner_id == owner_id)
+        # Show projects the user owns OR has tasks assigned to them in
+        assigned_project_ids = select(Task.project_id).where(
+            Task.assigned_to == owner_id
+        ).scalar_subquery()
+        query = query.where(
+            or_(
+                Project.owner_id == owner_id,
+                Project.id.in_(assigned_project_ids),
+            )
+        )
     if team_id:
         query = query.where(Project.team_id == team_id)
     if q:
