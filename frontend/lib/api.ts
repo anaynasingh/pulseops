@@ -1,6 +1,10 @@
 /**
  * PulseOps — Typed API Client
  * Thin wrapper around axios pointing at FastAPI backend.
+ *
+ * NOTE: All collection endpoints use trailing slashes (e.g. "/projects/")
+ * to avoid FastAPI's 307 redirect. On Railway (cross-origin), browsers drop
+ * the Authorization header when following a redirect, causing silent 401s.
  */
 import axios from "axios";
 
@@ -34,10 +38,10 @@ export const authApi = {
 
 export const projectsApi = {
   list: (params?: Record<string, unknown>) =>
-    api.get("/projects", { params }).then((r) => r.data),
+    api.get("/projects/", { params }).then((r) => r.data),
   get: (id: string) => api.get(`/projects/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) =>
-    api.post("/projects", data).then((r) => r.data),
+    api.post("/projects/", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch(`/projects/${id}`, data).then((r) => r.data),
   delete: (id: string) => api.delete(`/projects/${id}`),
@@ -54,9 +58,9 @@ export const kanbanApi = {
 
 export const tasksApi = {
   list: (params?: Record<string, unknown>) =>
-    api.get("/tasks", { params }).then((r) => r.data),
+    api.get("/tasks/", { params }).then((r) => r.data),
   create: (data: Record<string, unknown>) =>
-    api.post("/tasks", data).then((r) => r.data),
+    api.post("/tasks/", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch(`/tasks/${id}`, data).then((r) => r.data),
   delete: (id: string) => api.delete(`/tasks/${id}`),
@@ -102,7 +106,7 @@ export const searchApi = {
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
 export const analyticsApi = {
-  dashboard: () => api.get("/analytics/dashboard").then((r) => r.data),
+  dashboard: () => api.get("/analytics/dashboard/").then((r) => r.data),
   myDashboard: () => api.get("/analytics/my-dashboard").then((r) => r.data),
   health: (project_id: string) =>
     api.get(`/analytics/health/${project_id}`).then((r) => r.data),
