@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { projectsApi, tasksApi, aiApi } from "@/lib/api";
+import { projectsApi, tasksApi, aiApi, usersApi } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { PRIORITY_CONFIG, HEALTH_CONFIG, KANBAN_COLUMNS } from "@/lib/types";
 import { formatDate, getDaysUntil, initials } from "@/lib/utils";
@@ -93,11 +93,13 @@ function EditableSelect({
 // ── Task edit modal ───────────────────────────────────────────────────────────
 function TaskModal({
   task,
+  currentProjectId,
   onClose,
   onSave,
   onDelete,
 }: {
-  task: { id: string; title: string; description?: string; priority: string; status: string; is_completed: boolean; due_date?: string } | null;
+  task: { id: string; title: string; description?: string; priority: string; status: string; is_completed: boolean; due_date?: string; assigned_to?: string; assignee?: { id: string; name: string } | null } | null;
+  currentProjectId: string;
   onClose: () => void;
   onSave: (id: string, data: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
@@ -106,8 +108,16 @@ function TaskModal({
   const [description, setDescription] = useState(task?.description ?? "");
   const [priority, setPriority] = useState(task?.priority ?? "medium");
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
+  const [assignedTo, setAssignedTo] = useState(task?.assigned_to ?? task?.assignee?.id ?? "");
+  const [projectId, setProjectId] = useState(currentProjectId);
+
+  // Load team members and all projects for dropdowns
+  const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => usersApi.list() });
+  const { data: allProjects = [] } = useQuery<any[]>({ queryKey: ["projects-all"], queryFn: () => projectsApi.list({ limit: 100 }) });
 
   if (!task) return null;
+
+  const inputCls = "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500";
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -117,31 +127,21 @@ function TaskModal({
           <button onClick={onClose} className="text-slate-500 hover:text-white text-xl leading-none transition-colors">×</button>
         </div>
         <div className="p-5 space-y-4">
+          {/* Title */}
           <div>
             <label className="text-xs text-slate-400 block mb-1.5">Title</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-            />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
           </div>
+          {/* Description */}
           <div>
             <label className="text-xs text-slate-400 block mb-1.5">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 resize-none"
-            />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`${inputCls} resize-none`} />
           </div>
+          {/* Priority + Due Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-400 block mb-1.5">Priority</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-              >
+              <select value={priority} onChange={(e) => setPriority(e.target.value)} className={inputCls}>
                 {["low", "medium", "high", "urgent"].map((p) => (
                   <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
                 ))}
@@ -149,13 +149,33 @@ function TaskModal({
             </div>
             <div>
               <label className="text-xs text-slate-400 block mb-1.5">Due Date</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-              />
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
             </div>
+          </div>
+          {/* Assignee */}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1.5">
+              Assigned to
+              {task.assignee && <span className="ml-2 text-slate-600">currently: {task.assignee.name}</span>}
+            </label>
+            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className={inputCls}>
+              <option value="">Unassigned</option>
+              {(users as any[]).map((u: any) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+          {/* Move to project */}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1.5">
+              Project
+              <span className="ml-2 text-indigo-400 text-[10px] bg-indigo-950 px-1.5 py-0.5 rounded">move task</span>
+            </label>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inputCls}>
+              {(allProjects as any[]).map((p: any) => (
+                <option key={p.id} value={p.id}>{p.title}</option>
+              ))}
+            </select>
           </div>
         </div>
         <div className="flex items-center justify-between px-5 py-4 border-t border-slate-800">
@@ -171,7 +191,14 @@ function TaskModal({
             </button>
             <button
               onClick={() => {
-                onSave(task.id, { title, description, priority, due_date: dueDate || null });
+                onSave(task.id, {
+                  title,
+                  description,
+                  priority,
+                  due_date: dueDate || null,
+                  assigned_to: assignedTo || null,
+                  ...(projectId !== currentProjectId && { project_id: projectId }),
+                });
                 onClose();
               }}
               className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
@@ -279,6 +306,7 @@ export default function ProjectDetailPage() {
       {editingTaskObj && (
         <TaskModal
           task={editingTaskObj}
+          currentProjectId={id!}
           onClose={() => setEditingTask(null)}
           onSave={(taskId, data) => updateTask.mutate({ taskId, data })}
           onDelete={(taskId) => deleteTask.mutate(taskId)}

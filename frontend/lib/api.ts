@@ -36,6 +36,12 @@ export const authApi = {
   mcpReset: () => api.post("/auth/mcp-reset").then((r) => r.data),
 };
 
+// ── Users ─────────────────────────────────────────────────────────────────────
+
+export const usersApi = {
+  list: () => api.get("/users/").then((r) => r.data),
+};
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 export const projectsApi = {
