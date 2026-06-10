@@ -9,7 +9,10 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
+  closestCenter,
+  type CollisionDetection,
 } from "@dnd-kit/core";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, kanbanApi } from "@/lib/api";
@@ -24,6 +27,22 @@ interface KanbanBoardProps {
   filterPriority?: string;
   filterOwner?: string;
 }
+
+// Custom collision: pointer position wins over corner proximity.
+// Columns always take priority over cards so you can't accidentally
+// drop in the wrong column.
+const kanbanCollision: CollisionDetection = (args) => {
+  // 1. Check if pointer is directly over a column first
+  const columnIds = new Set(KANBAN_COLUMNS.map((c) => c.id));
+  const columnContainers = args.droppableContainers.filter((c) =>
+    columnIds.has(String(c.id))
+  );
+  const overColumn = pointerWithin({ ...args, droppableContainers: columnContainers });
+  if (overColumn.length > 0) return overColumn;
+
+  // 2. Fall back to rect intersection for empty columns
+  return rectIntersection(args);
+};
 
 export function KanbanBoard({ searchQuery, filterPriority, filterOwner }: KanbanBoardProps) {
   const queryClient = useQueryClient();
@@ -96,7 +115,7 @@ export function KanbanBoard({ searchQuery, filterPriority, filterOwner }: Kanban
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={kanbanCollision}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
