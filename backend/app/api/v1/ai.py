@@ -806,6 +806,220 @@ Answer questions about the workspace directly and concisely. Use bullet points w
     return {"reply": answer}
 
 
+# ── Task Deduplication + Smart Update Agent ──────────────────────────────────
+
+class _DedupeTaskIn(BaseModel):
+    title: str
+    description: Optional[str] = None
+    priority: str = "medium"
+    project_name: Optional[str] = None
+
+
+class _DedupeRequest(BaseModel):
+    proposed_tasks: List[_DedupeTaskIn]
+    context: Optional[str] = None   # meeting summary or transcript snippet
+
+
+class _DedupeMatch(BaseModel):
+    proposed_title: str
+    match_type: str           # "duplicate" | "update" | "new"
+    existing_task_id: Optional[str] = None
+    existing_task_title: Optional[str] = None
+    existing_task_status: Optional[str] = None
+    confidence: float         # 0-1
+    suggestion: str           # human-readable explanation
+    suggested_action: str     # "skip" | "update_status" | "create" | "merge"
+    suggested_status: Optional[str] = None   # if update_status
+
+
+_DEDUPE_SYSTEM = """You are a task deduplication agent for a team project management system.
+
+Given a list of PROPOSED tasks and the team's EXISTING tasks, identify:
+1. DUPLICATES: Proposed task is essentially the same as an existing one
+2. UPDATES: Proposed task implies an existing task has been completed or needs status change
+3. NEW: Proposed task is genuinely new and should be created
+
+Rules:
+- Be fuzzy — "Fix CORS bug" and "Add CORS whitelist for Stephen" are the same task
+- If a meeting shows a feature was DEMOED WORKING, suggest marking the task complete
+- If a task is partially done, suggest "in_progress"
+- Confidence: 0.9+ = very sure, 0.7-0.9 = likely, below 0.7 = new task
+
+Respond with a JSON array of match objects. Each object has:
+- proposed_title: the proposed task title
+- match_type: "duplicate" | "update" | "new"
+- existing_task_id: UUID string or null
+- existing_task_title: string or null
+- existing_task_status: current status or null
+- confidence: float 0-1
+- suggestion: 1 sentence explaining what you found
+- suggested_action: "skip" | "update_status" | "create" | "merge"
+- suggested_status: "done" | "in_progress" | "todo" | null (only for update_status)"""
+
+
+@router.post("/check-duplicates", response_model=dict)
+async def check_task_duplicates(
+    payload: _DedupeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Check proposed tasks against existing ones.
+    Returns matches, duplicates, and smart update suggestions.
+    User must confirm before anything is created or changed."""
+
+    # Load all existing open tasks for this user's projects
+    assigned_proj_ids = select(Task.project_id).where(Task.assigned_to == current_user.id).scalar_subquery()
+    existing_res = await db.execute(
+        select(Task)
+        .where(
+            Task.is_completed == False,
+            Task.status != "cancelled",
+            Task.project_id.in_(assigned_proj_ids),
+        )
+        .order_by(Task.created_at.desc())
+        .limit(100)
+    )
+    existing_tasks = existing_res.scalars().all()
+
+    if not existing_tasks:
+        # No existing tasks — everything is new
+        return {
+            "matches": [
+                {"proposed_title": t.title, "match_type": "new", "suggested_action": "create",
+                 "confidence": 1.0, "suggestion": "No existing tasks to compare against."}
+                for t in payload.proposed_tasks
+            ],
+            "summary": f"All {len(payload.proposed_tasks)} tasks are new.",
+            "duplicates_found": 0,
+            "updates_suggested": 0,
+        }
+
+    # Build context for the AI
+    existing_list = "\n".join([
+        f"- [{t.id}] \"{t.title}\" | status:{t.status.value} | priority:{t.priority.value}"
+        + (f" | project:{t.project_id}" if t.project_id else "")
+        for t in existing_tasks
+    ])
+    proposed_list = "\n".join([
+        f"- \"{t.title}\"" + (f" | {t.description[:100]}" if t.description else "")
+        for t in payload.proposed_tasks
+    ])
+    context_note = f"\nMeeting context:\n{payload.context[:500]}" if payload.context else ""
+
+    user_prompt = f"""EXISTING TASKS ({len(existing_tasks)}):
+{existing_list}
+
+PROPOSED NEW TASKS ({len(payload.proposed_tasks)}):
+{proposed_list}{context_note}
+
+Analyse each proposed task against the existing list. Return a JSON array."""
+
+    import json as _json
+    response = await client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": _DEDUPE_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.1,
+    )
+
+    raw = response.choices[0].message.content
+    try:
+        parsed = _json.loads(raw)
+        matches = parsed if isinstance(parsed, list) else parsed.get("matches", parsed.get("tasks", []))
+    except Exception:
+        matches = [{"proposed_title": t.title, "match_type": "new", "suggested_action": "create", "confidence": 1.0, "suggestion": "Could not analyse."} for t in payload.proposed_tasks]
+
+    duplicates = sum(1 for m in matches if m.get("match_type") == "duplicate")
+    updates = sum(1 for m in matches if m.get("match_type") == "update")
+    new_tasks = sum(1 for m in matches if m.get("match_type") == "new")
+
+    return {
+        "matches": matches,
+        "summary": f"Found {duplicates} duplicate(s), {updates} update suggestion(s), {new_tasks} new task(s).",
+        "duplicates_found": duplicates,
+        "updates_suggested": updates,
+    }
+
+
+class _ApplyDedupeRequest(BaseModel):
+    """User has reviewed the suggestions and confirmed which to apply."""
+    confirmations: List[dict]   # [{proposed_title, action: "skip"|"create"|"update_status", task_id?, new_status?}]
+    project_id: Optional[str] = None
+
+
+@router.post("/apply-dedup-decisions", response_model=dict, status_code=201)
+async def apply_dedup_decisions(
+    payload: _ApplyDedupeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Apply the user-confirmed deduplication decisions.
+    - skip: don't create the task
+    - create: create as new task
+    - update_status: update existing task status"""
+
+    created = []
+    updated = []
+    skipped = []
+
+    for conf in payload.confirmations:
+        action = conf.get("action", "create")
+        title = conf.get("proposed_title", "")
+
+        if action == "skip":
+            skipped.append(title)
+
+        elif action == "update_status" and conf.get("task_id"):
+            from uuid import UUID as _UUID
+            task_res = await db.execute(select(Task).where(Task.id == _UUID(conf["task_id"])))
+            task = task_res.scalar_one_or_none()
+            if task:
+                new_status = conf.get("new_status", "done")
+                task.status = ProjectStatus(new_status)
+                if new_status == "done":
+                    task.is_completed = True
+                    from datetime import datetime as _dt
+                    task.completed_at = _dt.utcnow()
+                updated.append(f"{task.title} → {new_status}")
+
+        elif action == "create":
+            # Find project
+            proj = None
+            if payload.project_id:
+                from uuid import UUID as _UUID2
+                proj_res = await db.execute(select(Project).where(Project.id == _UUID2(payload.project_id)))
+                proj = proj_res.scalar_one_or_none()
+            if not proj:
+                proj_res = await db.execute(select(Project).where(Project.title == "Task Planner App").limit(1))
+                proj = proj_res.scalar_one_or_none()
+            if proj:
+                new_task = Task(
+                    title=conf.get("proposed_title", "New task"),
+                    description=conf.get("description"),
+                    status=ProjectStatus.todo,
+                    priority=PriorityLevel(conf.get("priority", "medium")),
+                    project_id=proj.id,
+                    assigned_to=current_user.id,
+                    created_by=current_user.id,
+                )
+                db.add(new_task)
+                created.append(title)
+
+    await db.commit()
+    return {
+        "created": len(created),
+        "updated": len(updated),
+        "skipped": len(skipped),
+        "created_titles": created,
+        "updated_titles": updated,
+        "skipped_titles": skipped,
+        "message": f"Created {len(created)}, updated {len(updated)}, skipped {len(skipped)} tasks.",
+    }
+
+
 # ── Confirm Tasks (from chat proposals) ──────────────────────────────────────
 
 @router.post("/confirm-tasks", response_model=dict, status_code=201)

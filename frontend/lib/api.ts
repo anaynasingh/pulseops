@@ -103,6 +103,10 @@ export const aiApi = {
     api.get(`/ai/insights/${project_id}`).then((r) => r.data),
   dismissInsight: (insight_id: string) =>
     api.delete(`/ai/insights/${insight_id}/dismiss`),
+  checkDuplicates: (proposed_tasks: Record<string, unknown>[], context?: string) =>
+    api.post("/ai/check-duplicates", { proposed_tasks, context }).then((r) => r.data),
+  applyDedupDecisions: (confirmations: Record<string, unknown>[], project_id?: string) =>
+    api.post("/ai/apply-dedup-decisions", { confirmations, project_id }).then((r) => r.data),
 };
 
 // ── Search ────────────────────────────────────────────────────────────────────

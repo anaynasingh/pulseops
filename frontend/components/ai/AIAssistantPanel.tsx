@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { PRIORITY_CONFIG } from "@/lib/types";
 import type { PriorityLevel } from "@/lib/types";
+import { DedupeModal } from "@/components/ai/DedupeModal";
 
 interface ProposedTask {
   title: string;
@@ -45,6 +46,8 @@ export function AIAssistantPanel() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dedupeResult, setDedupeResult] = useState<any>(null);
+  const [dedupeProjectId, setDedupeProjectId] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,16 +65,36 @@ export function AIAssistantPanel() {
       const res = await aiApi.chat(text);
 
       if (res.action === "propose_tasks" && res.proposed_tasks?.length > 0) {
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
-            content: res.reply,
-            proposedTasks: res.proposed_tasks,
-            proposedProjectId: res.project_id || null,
-            tasksConfirmed: false,
-          },
-        ]);
+        // Run dedup check before showing proposed tasks to user
+        setMessages((m) => [...m, { role: "assistant", content: res.reply + "\n\n_Checking for duplicates…_" }]);
+        try {
+          const dedup = await aiApi.checkDuplicates(res.proposed_tasks, text);
+          const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
+          if (hasIssues) {
+            // Show dedup modal for user to confirm
+            setDedupeResult(dedup);
+            setDedupeProjectId(res.project_id || undefined);
+            setMessages((m) => m.map((msg, i) =>
+              i === m.length - 1
+                ? { ...msg, content: res.reply + `\n\n✦ _Smart check found ${dedup.duplicates_found} duplicate(s) and ${dedup.updates_suggested} update suggestion(s). Review below._` }
+                : msg
+            ));
+          } else {
+            // All new — proceed as normal
+            setMessages((m) => m.map((msg, i) =>
+              i === m.length - 1
+                ? { ...msg, content: res.reply, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
+                : msg
+            ));
+          }
+        } catch {
+          // Dedup check failed — proceed without it
+          setMessages((m) => m.map((msg, i) =>
+            i === m.length - 1
+              ? { ...msg, content: res.reply, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
+              : msg
+          ));
+        }
       } else {
         const answer = res.reply || "I analyzed your workspace but couldn't generate a response.";
         setMessages((m) => [...m, { role: "assistant", content: answer }]);
@@ -91,6 +114,16 @@ export function AIAssistantPanel() {
   };
 
   return (
+    <>
+    {/* Dedup confirmation modal */}
+    {dedupeResult && (
+      <DedupeModal
+        result={dedupeResult}
+        projectId={dedupeProjectId}
+        onDone={() => { setDedupeResult(null); queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }); }}
+        onCancel={() => setDedupeResult(null)}
+      />
+    )}
     <div className="fixed right-0 top-0 bottom-0 w-80 bg-[#080f20] border-l border-slate-800 flex flex-col z-20 shadow-2xl">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3.5 border-b border-slate-800">
@@ -191,6 +224,7 @@ export function AIAssistantPanel() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
