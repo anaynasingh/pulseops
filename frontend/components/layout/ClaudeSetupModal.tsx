@@ -64,27 +64,54 @@ const STEPS = [
     id: 3,
     title: "Connect Task Planner MCP",
     icon: "⚡",
-    desc: "Lets Claude create, update and read tasks directly in this app.",
+    desc: "Lets Claude create, update and read tasks directly in this app — runs locally on your machine.",
     content: (
       <div className="space-y-3">
-        <p className="text-sm text-slate-600">In your terminal, run:</p>
-        <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs text-green-400 select-all leading-relaxed">
-          claude mcp add task-planner \{"\n"}
-          {"  "}--url https://backend-production-ff8e.up.railway.app/mcp
-        </div>
-        <ol className="space-y-2 text-sm text-slate-700">
-          {[
-            <>When prompted, enter your <strong>Task Planner email and password</strong></>,
-            <>Restart Claude Code — you'll see <strong>task-planner</strong> in your MCP tools</>,
-          ].map((step, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-              <span>{step}</span>
-            </li>
-          ))}
+        <p className="text-sm text-slate-600 font-medium">The MCP server is a small Python script that runs on your machine. 4 steps:</p>
+        <ol className="space-y-3 text-sm text-slate-700">
+          <li className="flex gap-3">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <div>
+              <p>Clone the repo (if not already done):</p>
+              <div className="bg-slate-900 rounded p-2 font-mono text-xs text-green-400 mt-1 select-all">
+                git clone https://github.com/P33-AI/ai-task-management-and-workflow-intelligence-system.git
+              </div>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
+            <div>
+              <p>Install the dependencies:</p>
+              <div className="bg-slate-900 rounded p-2 font-mono text-xs text-green-400 mt-1 select-all">
+                cd mcp-servers/pulseops{"\n"}
+                pip install mcp httpx python-dotenv
+              </div>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
+            <div>
+              <p>Create a <code className="bg-slate-100 px-1 rounded text-xs">.env</code> file in the <code className="bg-slate-100 px-1 rounded text-xs">mcp-servers/pulseops</code> folder:</p>
+              <div className="bg-slate-900 rounded p-2 font-mono text-xs text-green-400 mt-1 select-all leading-relaxed">
+                PULSEOPS_API_URL=https://backend-production-ff8e.up.railway.app/api/v1{"\n"}
+                PULSEOPS_EMAIL=your@prospect33.com{"\n"}
+                PULSEOPS_PASSWORD=YourPassword
+              </div>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">4</span>
+            <div>
+              <p>Register it with Claude Code (use the <strong>full path</strong> to server.py):</p>
+              <div className="bg-slate-900 rounded p-2 font-mono text-xs text-green-400 mt-1 select-all">
+                claude mcp add task-planner python C:\path\to\mcp-servers\pulseops\server.py
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Then restart Claude Code — you&apos;ll see <strong>task-planner</strong> in your tools.</p>
+            </div>
+          </li>
         </ol>
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
-          Now say to Claude: <em>&ldquo;Summarise today&apos;s dev meeting and add the action items to my task planner&rdquo;</em>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+          <strong>Need the full path?</strong> In the mcp-servers/pulseops folder, run <code className="bg-amber-100 px-1 rounded">cd</code> (Windows) or <code className="bg-amber-100 px-1 rounded">pwd</code> (Mac/Linux) to get it.
         </div>
       </div>
     ),
