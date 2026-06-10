@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { tasksApi, usersApi, projectsApi } from "@/lib/api";
 import { PRIORITY_CONFIG, PRIORITY_CONFIG_LIGHT } from "@/lib/types";
 import { useUIStore } from "@/lib/store";
 import { formatDate, getDaysUntil } from "@/lib/utils";
@@ -17,6 +17,16 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
   const [retiredIds, setRetiredIds] = useState<Set<string>>(new Set());
   const [confirmRetire, setConfirmRetire] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // For reassign / move dropdowns
+  const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => usersApi.list(), enabled: !!editingId });
+  const { data: allProjects = [] } = useQuery<any[]>({ queryKey: ["projects-all"], queryFn: () => projectsApi.list({ limit: 100 }), enabled: !!editingId });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => tasksApi.update(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }); setEditingId(null); },
+  });
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => tasksApi.update(id, { is_completed: true }),
@@ -101,17 +111,21 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  {/* Priority badge + title */}
+                  {/* Priority badge + title (click title to expand edit panel) */}
                   <div className="flex items-center gap-2 flex-wrap mb-2">
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-md shrink-0 ${pc.color} ${pc.bg}`}>
                       {task.priority.toUpperCase()}
                     </span>
-                    <p className={`text-sm font-semibold leading-snug ${
-                      doneIds.has(task.id) ? "line-through opacity-40" :
-                      isLight ? "text-slate-900" : "text-slate-100"
-                    }`}>
+                    <button
+                      onClick={() => setEditingId(editingId === task.id ? null : task.id)}
+                      className={`text-sm font-semibold leading-snug text-left hover:underline decoration-dotted underline-offset-2 ${
+                        doneIds.has(task.id) ? "line-through opacity-40" :
+                        isLight ? "text-slate-900 hover:text-indigo-700" : "text-slate-100 hover:text-indigo-300"
+                      }`}
+                      title="Click to reassign or move project"
+                    >
                       {task.title}
-                    </p>
+                    </button>
                   </div>
 
                   {/* Meta row */}
@@ -119,6 +133,11 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                     {task.project && (
                       <span className={`text-xs font-semibold truncate max-w-[200px] ${isLight ? "text-indigo-700" : "text-indigo-400"}`}>
                         {(task.project as any).title}
+                      </span>
+                    )}
+                    {task.assignee && (
+                      <span className={`text-xs ${isLight ? "text-slate-500" : "text-slate-500"}`}>
+                        → {task.assignee.name.split(" ")[0]}
                       </span>
                     )}
                     <span className={`text-xs ${isLight ? "text-slate-500" : "text-slate-500"}`}>
@@ -134,6 +153,43 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                       </span>
                     )}
                   </div>
+
+                  {/* Inline edit panel — expands on title click */}
+                  {editingId === task.id && (
+                    <div className={`mt-3 p-3 rounded-lg border space-y-2 ${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-800/60 border-slate-700"}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${isLight ? "text-slate-500" : "text-slate-400"}`}>Reassign / Move</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className={`text-[11px] block mb-1 ${isLight ? "text-slate-500" : "text-slate-400"}`}>Assigned to</label>
+                          <select
+                            defaultValue={task.assigned_to ?? ""}
+                            onChange={(e) => updateMutation.mutate({ id: task.id, data: { assigned_to: e.target.value || null } })}
+                            className={`w-full text-xs rounded-md px-2 py-1.5 border focus:outline-none ${isLight ? "bg-white border-slate-300 text-slate-900" : "bg-slate-900 border-slate-600 text-white"}`}
+                          >
+                            <option value="">Unassigned</option>
+                            {(users as any[]).map((u: any) => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className={`text-[11px] block mb-1 ${isLight ? "text-slate-500" : "text-slate-400"}`}>Move to project</label>
+                          <select
+                            defaultValue={(task.project as any)?.id ?? ""}
+                            onChange={(e) => { if (e.target.value) updateMutation.mutate({ id: task.id, data: { project_id: e.target.value } }); }}
+                            className={`w-full text-xs rounded-md px-2 py-1.5 border focus:outline-none ${isLight ? "bg-white border-slate-300 text-slate-900" : "bg-slate-900 border-slate-600 text-white"}`}
+                          >
+                            {(allProjects as any[]).map((p: any) => (
+                              <option key={p.id} value={p.id}>{p.title}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <button onClick={() => setEditingId(null)} className={`text-[11px] ${isLight ? "text-slate-400 hover:text-slate-600" : "text-slate-500 hover:text-slate-300"}`}>
+                        Done ↑
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Retire */}
