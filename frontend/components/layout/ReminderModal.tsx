@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useReminderStore } from "@/lib/store";
+import { useReminderStore, useAuthStore } from "@/lib/store";
 import { tasksApi } from "@/lib/api";
 import { PRIORITY_CONFIG } from "@/lib/types";
 import type { Task } from "@/lib/types";
@@ -24,11 +24,12 @@ function topTasks(tasks: Task[]): Task[] {
 
 export function ReminderModal() {
   const { visible, dismiss, snooze } = useReminderStore();
+  const { user } = useAuthStore();
 
   const { data: tasks = [] } = useQuery<Task[]>({
-    queryKey: ["tasks-reminder"],
-    queryFn: () => tasksApi.list(),
-    enabled: visible,
+    queryKey: ["tasks-reminder", user?.id],
+    queryFn: () => tasksApi.list({ assigned_to: user?.id }),
+    enabled: visible && !!user?.id,
     staleTime: 30_000,
   });
 
@@ -72,9 +73,9 @@ export function ReminderModal() {
                         {task.due_date && (
                           <span className="text-[10px] text-slate-600">due {task.due_date}</span>
                         )}
-                        {task.assignee && (
+                        {task.project && (
                           <span className="text-[10px] text-slate-600">
-                            → {task.assignee.name.split(" ")[0]}
+                            {(task.project as any).title?.split(" ")[0]}
                           </span>
                         )}
                       </div>
