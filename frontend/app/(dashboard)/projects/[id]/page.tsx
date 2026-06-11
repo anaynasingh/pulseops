@@ -110,6 +110,7 @@ function TaskModal({
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
   const [assignedTo, setAssignedTo] = useState(task?.assigned_to ?? task?.assignee?.id ?? "");
   const [projectId, setProjectId] = useState(currentProjectId);
+  const [isPrivate, setIsPrivate] = useState((task as any)?.is_private ?? false);
 
   // Load team members and all projects for dropdowns
   const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => usersApi.list() });
@@ -165,6 +166,22 @@ function TaskModal({
               ))}
             </select>
           </div>
+          {/* Private toggle */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/40 border border-slate-700">
+            <div>
+              <p className="text-xs text-white font-medium">{isPrivate ? "🔒 Private task" : "👁 Visible to team"}</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {isPrivate ? "Only you and the assignee can see this" : "All team members can see this task"}
+              </p>
+            </div>
+            <button
+              onClick={() => setIsPrivate(!isPrivate)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${isPrivate ? "bg-amber-500" : "bg-slate-600"}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${isPrivate ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+
           {/* Move to project */}
           <div>
             <label className="text-xs text-slate-400 block mb-1.5">
@@ -197,6 +214,7 @@ function TaskModal({
                   priority,
                   due_date: dueDate || null,
                   assigned_to: assignedTo || null,
+                  is_private: isPrivate,
                   ...(projectId !== currentProjectId && { project_id: projectId }),
                 });
                 onClose();

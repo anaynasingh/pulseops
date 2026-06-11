@@ -29,6 +29,7 @@ export interface Task {
   assigned_to?: string;
   due_date?: string;
   is_completed: boolean;
+  is_private: boolean;
   completed_at?: string;
   created_at: string;
   assignee?: User;

@@ -20,11 +20,20 @@ async def list_tasks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from sqlalchemy import or_
     query = select(Task).options(selectinload(Task.assignee), selectinload(Task.project))
     if project_id:
         query = query.where(Task.project_id == project_id)
     if assigned_to:
         query = query.where(Task.assigned_to == assigned_to)
+    # Privacy filter: private tasks only visible to assignee or creator
+    query = query.where(
+        or_(
+            Task.is_private == False,
+            Task.assigned_to == current_user.id,
+            Task.created_by == current_user.id,
+        )
+    )
     result = await db.execute(query.order_by(Task.kanban_order, Task.created_at))
     return [TaskOut.model_validate(t) for t in result.scalars().all()]
 

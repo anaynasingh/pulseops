@@ -118,12 +118,13 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                     </span>
                     <button
                       onClick={() => setEditingId(editingId === task.id ? null : task.id)}
-                      className={`text-sm font-semibold leading-snug text-left hover:underline decoration-dotted underline-offset-2 ${
+                      className={`text-sm font-semibold leading-snug text-left hover:underline decoration-dotted underline-offset-2 flex items-center gap-1.5 ${
                         doneIds.has(task.id) ? "line-through opacity-40" :
                         isLight ? "text-slate-900 hover:text-indigo-700" : "text-slate-100 hover:text-indigo-300"
                       }`}
                       title="Click to reassign or move project"
                     >
+                      {task.is_private && <span className="text-xs" title="Private task">🔒</span>}
                       {task.title}
                     </button>
                   </div>
@@ -184,6 +185,25 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                             ))}
                           </select>
                         </div>
+                      </div>
+                      {/* Private toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{task.is_private ? "🔒" : "👁"}</span>
+                          <span className={`text-[11px] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                            {task.is_private ? "Private — only you can see this" : "Visible to whole team"}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => updateMutation.mutate({ id: task.id, data: { is_private: !task.is_private } })}
+                          className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                            task.is_private
+                              ? isLight ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-amber-900/30 border-amber-700 text-amber-400"
+                              : isLight ? "bg-slate-100 border-slate-300 text-slate-600" : "bg-slate-800 border-slate-600 text-slate-400"
+                          }`}
+                        >
+                          {task.is_private ? "Make public" : "Make private"}
+                        </button>
                       </div>
                       <button onClick={() => setEditingId(null)} className={`text-[11px] ${isLight ? "text-slate-400 hover:text-slate-600" : "text-slate-500 hover:text-slate-300"}`}>
                         Done ↑

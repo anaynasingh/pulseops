@@ -190,6 +190,7 @@ class TaskCreate(BaseModel):
     priority: PriorityLevel = PriorityLevel.medium
     assigned_to: Optional[UUID] = None
     due_date: Optional[date] = None
+    is_private: bool = False
 
 
 class TaskUpdate(BaseModel):
@@ -201,6 +202,7 @@ class TaskUpdate(BaseModel):
     project_id: Optional[UUID] = None   # move to different project
     due_date: Optional[date] = None
     is_completed: Optional[bool] = None
+    is_private: Optional[bool] = None
 
 
 class ProjectMini(BaseModel):
@@ -221,6 +223,7 @@ class TaskOut(BaseModel):
     assigned_to: Optional[UUID] = None
     due_date: Optional[date] = None
     is_completed: bool
+    is_private: bool = False
     completed_at: Optional[datetime] = None
     created_at: datetime
     assignee: Optional[UserOut] = None
