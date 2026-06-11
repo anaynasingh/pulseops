@@ -73,7 +73,8 @@ const STEPS = [
         <p className="text-sm text-slate-600">In your terminal, run this one command (swap in your own email and password):</p>
         <div className="bg-slate-900 rounded-lg p-3 font-mono text-xs text-green-400 select-all leading-relaxed">
           claude mcp add task-planner \{"\n"}
-          {"  "}https://backend-production-ff8e.up.railway.app/mcp \{"\n"}
+          {"  "}--transport sse \{"\n"}
+          {"  "}https://backend-production-ff8e.up.railway.app/mcp/sse \{"\n"}
           {'  --header "X-Email: you@prospect33.com" \\'}{"\n"}
           {'  --header "X-Password: YourPassword"'}
         </div>

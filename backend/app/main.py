@@ -52,18 +52,6 @@ app.include_router(analytics.router, prefix=PREFIX)
 app.include_router(users.router, prefix=PREFIX)
 
 
-# Mount MCP server — Claude connects via: claude mcp add task-planner <URL>/mcp
-# Wrapped in try/except so a startup failure doesn't take down the whole API
-try:
-    from app.api.v1.mcp_server import mcp
-    app.mount("/mcp", mcp.streamable_http_app())
-    import logging
-    logging.getLogger(__name__).info("MCP server mounted at /mcp")
-except Exception as e:
-    import logging
-    logging.getLogger(__name__).error(f"MCP server failed to mount: {e}")
-
-
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "PulseOps API", "version": "1.0.0"}
@@ -75,3 +63,16 @@ async def root():
         "message": "PulseOps API — AI-Powered Team Operations Platform",
         "docs": "/docs",
     }
+
+
+# Mount MCP server LAST so all FastAPI routes take priority.
+# Using sse_app() which works correctly when embedded inside FastAPI.
+# streamable_http_app() requires its own lifecycle (run()) and fails embedded.
+try:
+    from app.api.v1.mcp_server import mcp
+    app.mount("/mcp", mcp.sse_app())
+    import logging
+    logging.getLogger(__name__).info("MCP server mounted at /mcp (SSE transport)")
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).error(f"MCP server failed to mount: {e}")
