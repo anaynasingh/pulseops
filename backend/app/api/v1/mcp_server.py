@@ -13,6 +13,7 @@ from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
+from contextvars import ContextVar
 from mcp.server.fastmcp import FastMCP, Context
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
@@ -25,23 +26,19 @@ from app.core.security import verify_password
 
 mcp = FastMCP("Task Planner")
 
+# ── Per-request header storage (set by middleware in main.py) ─────────────────
+# Claude sends X-Email and X-Password with every SSE/message request.
+# ASGI middleware captures them into these ContextVars before the tool runs.
+mcp_email_var: ContextVar[Optional[str]] = ContextVar("mcp_email", default=None)
+mcp_password_var: ContextVar[Optional[str]] = ContextVar("mcp_password", default=None)
+
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
-async def _get_credentials(ctx: Context):
-    """Extract X-Email and X-Password from request headers."""
-    try:
-        headers = dict(ctx.request_context.request.headers)
-        email = headers.get("x-email") or headers.get("X-Email")
-        password = headers.get("x-password") or headers.get("X-Password")
-        return email, password
-    except Exception:
-        return None, None
-
-
 async def _authenticate_ctx(ctx: Context) -> User | None:
-    """Authenticate from request context headers."""
-    email, password = await _get_credentials(ctx)
+    """Authenticate using credentials captured from HTTP headers by middleware."""
+    email = mcp_email_var.get()
+    password = mcp_password_var.get()
     if not email or not password:
         return None
     async with AsyncSessionLocal() as db:
