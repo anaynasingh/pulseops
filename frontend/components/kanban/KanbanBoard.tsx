@@ -54,18 +54,29 @@ export function KanbanBoard({ searchQuery, filterPriority, filterOwner }: Kanban
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // Fetch projects via slim kanban endpoint (no nested task lists — much faster)
+  // Fetch projects via slim kanban endpoint, fallback to full endpoint on error
   const { data: fetchedProjects } = useQuery<Project[]>({
     queryKey: ["projects-kanban", searchQuery, filterPriority, filterOwner],
-    queryFn: () =>
-      projectsApi.listKanban({
-        q: searchQuery || undefined,
-        priority: filterPriority || undefined,
-        owner_id: filterOwner || undefined,
-        limit: 200,
-      }),
-    staleTime: 60_000,   // cache for 1 min — board data doesn't change every second
-    gcTime: 5 * 60_000,  // keep in memory for 5 mins
+    queryFn: async () => {
+      try {
+        return await projectsApi.listKanban({
+          q: searchQuery || undefined,
+          priority: filterPriority || undefined,
+          owner_id: filterOwner || undefined,
+          limit: 200,
+        });
+      } catch {
+        // Fallback to full endpoint if slim endpoint fails
+        return projectsApi.list({
+          q: searchQuery || undefined,
+          priority: filterPriority || undefined,
+          owner_id: filterOwner || undefined,
+          limit: 200,
+        });
+      }
+    },
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
   });
 
   // Sync fetched projects into the board store
