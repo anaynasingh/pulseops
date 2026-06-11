@@ -88,6 +88,30 @@ async def update_task(
         setattr(task, field, value)
 
     await db.commit()
+
+    # Auto-recalculate project progress_pct whenever a task completion changes
+    if "is_completed" in update_data or "status" in update_data:
+        from app.models.models import Project
+        from sqlalchemy import func
+        total = (await db.execute(
+            select(func.count()).select_from(Task).where(Task.project_id == task.project_id)
+        )).scalar() or 0
+        done = (await db.execute(
+            select(func.count()).select_from(Task).where(
+                Task.project_id == task.project_id,
+                Task.is_completed == True,
+            )
+        )).scalar() or 0
+        new_pct = int((done / total) * 100) if total > 0 else 0
+        await db.execute(
+            select(Project).where(Project.id == task.project_id)
+        )
+        proj_result = await db.execute(select(Project).where(Project.id == task.project_id))
+        proj = proj_result.scalar_one_or_none()
+        if proj:
+            proj.progress_pct = new_pct
+            await db.commit()
+
     result = await db.execute(
         select(Task).options(selectinload(Task.assignee), selectinload(Task.project)).where(Task.id == task_id)
     )
