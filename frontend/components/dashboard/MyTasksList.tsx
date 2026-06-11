@@ -18,6 +18,7 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
   const [retiredIds, setRetiredIds] = useState<Set<string>>(new Set());
   const [confirmRetire, setConfirmRetire] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [privateOverrides, setPrivateOverrides] = useState<Record<string, boolean>>({});
 
   // For reassign / move dropdowns
   const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => usersApi.list(), enabled: !!editingId });
@@ -25,8 +26,18 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => tasksApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }); setEditingId(null); },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["my-dashboard"] });
+      // Don't close edit panel on privacy toggle — user may want to see the change
+      if (!("is_private" in (vars.data as any))) setEditingId(null);
+    },
   });
+
+  const togglePrivate = (taskId: string, currentValue: boolean) => {
+    const newValue = !currentValue;
+    setPrivateOverrides(prev => ({ ...prev, [taskId]: newValue }));  // instant UI
+    updateMutation.mutate({ id: taskId, data: { is_private: newValue } });
+  };
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => tasksApi.update(id, { is_completed: true }),
@@ -83,6 +94,8 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
             const isDueToday = daysLeft === 0;
             const isGone = doneIds.has(task.id) || retiredIds.has(task.id);
             const pc = PC[task.priority] ?? PC.medium;
+            // Use optimistic override if present, otherwise fall back to API value
+            const taskIsPrivate = task.id in privateOverrides ? privateOverrides[task.id] : (task.is_private ?? false);
 
             return (
               <div key={task.id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all duration-500 group ${
@@ -124,7 +137,7 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                       }`}
                       title="Click to reassign or move project"
                     >
-                      {task.is_private && <span className="text-xs" title="Private task">🔒</span>}
+                      {taskIsPrivate && <span className="text-xs" title="Private task">🔒</span>}
                       {task.title}
                     </button>
                   </div>
@@ -189,20 +202,20 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                       {/* Private toggle */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm">{task.is_private ? "🔒" : "👁"}</span>
+                          <span className="text-sm">{taskIsPrivate ? "🔒" : "👁"}</span>
                           <span className={`text-[11px] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
-                            {task.is_private ? "Private — only you can see this" : "Visible to whole team"}
+                            {taskIsPrivate ? "Private — only you can see this" : "Visible to whole team"}
                           </span>
                         </div>
                         <button
-                          onClick={() => updateMutation.mutate({ id: task.id, data: { is_private: !task.is_private } })}
+                          onClick={() => togglePrivate(task.id, taskIsPrivate)}
                           className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
-                            task.is_private
+                            taskIsPrivate
                               ? isLight ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-amber-900/30 border-amber-700 text-amber-400"
                               : isLight ? "bg-slate-100 border-slate-300 text-slate-600" : "bg-slate-800 border-slate-600 text-slate-400"
                           }`}
                         >
-                          {task.is_private ? "Make public" : "Make private"}
+                          {taskIsPrivate ? "Make public" : "Make private"}
                         </button>
                       </div>
                       <button onClick={() => setEditingId(null)} className={`text-[11px] ${isLight ? "text-slate-400 hover:text-slate-600" : "text-slate-500 hover:text-slate-300"}`}>
