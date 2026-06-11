@@ -14,11 +14,12 @@ except Exception:
     pass
 # ──────────────────────────────────────────────────────────────────────────────
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.config import settings
 from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics, users
-from app.api.v1.mcp_server import mcp
 
 app = FastAPI(
     title="PulseOps API",
@@ -26,6 +27,8 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    # Trust Railway's reverse proxy so redirects use https:// not http://
+    root_path_in_servers=False,
 )
 
 # CORS
@@ -50,7 +53,15 @@ app.include_router(users.router, prefix=PREFIX)
 
 
 # Mount MCP server — Claude connects via: claude mcp add task-planner <URL>/mcp
-app.mount("/mcp", mcp.streamable_http_app())
+# Wrapped in try/except so a startup failure doesn't take down the whole API
+try:
+    from app.api.v1.mcp_server import mcp
+    app.mount("/mcp", mcp.streamable_http_app())
+    import logging
+    logging.getLogger(__name__).info("MCP server mounted at /mcp")
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).error(f"MCP server failed to mount: {e}")
 
 
 @app.get("/health")
