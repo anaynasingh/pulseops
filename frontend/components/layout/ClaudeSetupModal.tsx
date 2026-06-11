@@ -83,7 +83,7 @@ const STEPS = [
         </div>
         <div className="space-y-1.5 pt-1">
           <p className="text-xs font-medium text-slate-600">Verify it works — say this to Claude:</p>
-          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 text-xs text-indigo-800 italic">
+          <div className="bg-slate-50 border-l-2 border-indigo-400 pl-3 pr-2 py-2 rounded-r-lg text-sm text-slate-700 italic">
             &ldquo;List my tasks in the task planner&rdquo;
           </div>
         </div>
@@ -106,9 +106,8 @@ const STEPS = [
             "Mark the 'Fix session persistence' task as complete",
             "Which Forage tasks are due this week?",
           ].map((ex, i) => (
-            <div key={i} className="flex gap-2 items-start bg-indigo-50 border border-indigo-100 rounded-lg p-2.5">
-              <span className="text-indigo-500 text-xs mt-0.5">✦</span>
-              <p className="text-xs text-indigo-800 italic">&ldquo;{ex}&rdquo;</p>
+            <div key={i} className="flex gap-2 items-start bg-slate-50 border-l-2 border-indigo-400 pl-3 pr-2 py-2 rounded-r-lg">
+              <p className="text-sm text-slate-700 italic">&ldquo;{ex}&rdquo;</p>
             </div>
           ))}
         </div>
