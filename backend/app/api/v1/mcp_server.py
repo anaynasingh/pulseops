@@ -207,24 +207,88 @@ async def create_tasks_bulk(
     tasks_json: str,
     x_email: Optional[str] = None,
     x_password: Optional[str] = None,
+    skip_dedup: bool = False,
 ) -> str:
     """
     Create multiple tasks at once — ideal after summarising a meeting.
+    Automatically checks for duplicates before creating. Skips tasks that
+    already exist (confidence >= 85%) and reports what was skipped.
+
     Pass a JSON array:
     [{"title":"...", "project_name":"...", "priority":"high", "due_date":"2026-06-15", "assignee_email":"..."}]
+
+    Set skip_dedup=True to bypass the duplicate check and create everything.
     """
     user = await _authenticate(x_email, x_password)
     if not user:
         return _auth_error()
 
-    import json
+    import json as _json
     try:
-        items = json.loads(tasks_json)
+        items = _json.loads(tasks_json)
     except Exception:
         return "❌ Invalid JSON."
 
+    if not items:
+        return "No tasks to create."
+
+    # ── Dedup check ──────────────────────────────────────────────────────────
+    skipped = []
+    to_create = items[:]
+
+    if not skip_dedup:
+        try:
+            from app.api.v1.ai import _DEDUPE_SYSTEM
+            from app.services.ai_service import client as _client, MODEL as _MODEL
+            from sqlalchemy import select as _select
+
+            async with AsyncSessionLocal() as db:
+                from app.models.models import Task as _Task, ProjectStatus as _PS
+                assigned_ids = _select(_Task.project_id).where(_Task.assigned_to == user.id).scalar_subquery()
+                existing_res = await db.execute(
+                    _select(_Task).where(
+                        _Task.is_completed == False,
+                        _Task.status != "cancelled",
+                        _Task.project_id.in_(assigned_ids),
+                    ).limit(80)
+                )
+                existing = existing_res.scalars().all()
+
+            if existing:
+                existing_list = "\n".join([f'- [{t.id}] "{t.title}" | {t.status.value}' for t in existing])
+                proposed_list = "\n".join([f'- "{item.get("title", "")}"' for item in items])
+
+                resp = await _client.chat.completions.create(
+                    model=_MODEL,
+                    messages=[
+                        {"role": "system", "content": _DEDUPE_SYSTEM},
+                        {"role": "user", "content": f"EXISTING:\n{existing_list}\n\nPROPOSED:\n{proposed_list}"},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                )
+                raw = _json.loads(resp.choices[0].message.content)
+                matches = raw.get("matches", raw) if isinstance(raw, dict) else raw
+
+                # Filter out high-confidence duplicates
+                skip_titles = {
+                    m["proposed_title"]
+                    for m in matches
+                    if m.get("match_type") == "duplicate" and float(m.get("confidence", 0)) >= 0.85
+                }
+                skipped_matches = [m for m in matches if m["proposed_title"] in skip_titles]
+                to_create = [item for item in items if item.get("title") not in skip_titles]
+
+                for m in skipped_matches:
+                    skipped.append(f'  ↩ Skipped "{m["proposed_title"]}" — {m.get("suggestion", "already exists")}')
+
+        except Exception as e:
+            # Dedup check failed — create everything and warn
+            skipped.append(f"  ⚠ Dedup check failed ({e}) — created all tasks without checking")
+
+    # ── Create remaining tasks ───────────────────────────────────────────────
     results = []
-    for item in items:
+    for item in to_create:
         r = await create_task(
             title=item.get("title", "Untitled"),
             project_name=item.get("project_name", "Task Planner App"),
@@ -237,7 +301,18 @@ async def create_tasks_bulk(
         )
         results.append(r)
 
-    return f"Created {len(results)} tasks:\n" + "\n".join(results)
+    # ── Summary ──────────────────────────────────────────────────────────────
+    lines = []
+    if results:
+        lines.append(f"✅ Created {len(results)} task(s):")
+        lines.extend([f"  {r}" for r in results])
+    if skipped:
+        lines.append(f"\n⏭ Skipped {len(skipped)} duplicate(s):")
+        lines.extend(skipped)
+    if not results and not skipped:
+        lines.append("Nothing to create.")
+
+    return "\n".join(lines)
 
 
 @mcp.tool()
