@@ -61,9 +61,34 @@ async def list_projects_kanban(
         query = query.where(or_(Project.owner_id == owner_id, Project.id.in_(assigned_ids)))
     query = query.limit(limit)
     result = await db.execute(query)
-    projects = [ProjectKanbanOut.model_validate(p) for p in result.scalars().all()]
+    raw_projects = result.scalars().all()
 
-    _kanban_cache[cache_key] = (time.time(), projects)   # store in cache
+    if not raw_projects:
+        _kanban_cache[cache_key] = (time.time(), [])
+        return []
+
+    # Batch-load ALL distinct assignees per project in ONE extra query
+    # Far cheaper than selectinload(tasks) which loads full task data
+    project_ids = [p.id for p in raw_projects]
+    assignee_rows = (await db.execute(
+        select(Task.project_id, User)
+        .join(User, User.id == Task.assigned_to)
+        .where(Task.project_id.in_(project_ids), Task.assigned_to.isnot(None))
+    )).all()
+
+    from collections import defaultdict
+    assignees_by_project: dict = defaultdict(dict)
+    for proj_id, user in assignee_rows:
+        assignees_by_project[proj_id][user.id] = UserOut.model_validate(user)
+
+    # Build final output
+    projects = []
+    for p in raw_projects:
+        item = ProjectKanbanOut.model_validate(p)
+        item.assignees = list(assignees_by_project.get(p.id, {}).values())
+        projects.append(item)
+
+    _kanban_cache[cache_key] = (time.time(), projects)
     return projects
 
 

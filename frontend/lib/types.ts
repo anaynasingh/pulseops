@@ -79,6 +79,7 @@ export interface Project {
   created_at: string;
   updated_at: string;
   owner?: User;
+  assignees?: User[];   // all people with tasks in this project (kanban view)
   tasks: Task[];
   insights: AIInsight[];
   health_records: ProjectHealth[];

@@ -8,11 +8,20 @@ import { formatDate, getDaysUntil, initials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/types";
 
-// Collect unique task assignees; fall back to project owner if none
+// Collect all people on this project (assignees + owner, deduplicated)
 function ProjectAssignees({ project }: { project: Project }) {
   const seen = new Set<string>();
   const members: { id: string; name: string }[] = [];
 
+  // Use the dedicated assignees field from the kanban endpoint
+  for (const a of (project as any).assignees ?? []) {
+    if (!seen.has(a.id)) {
+      seen.add(a.id);
+      members.push({ id: a.id, name: a.name });
+    }
+  }
+
+  // Fall back to task assignees (for project detail view where tasks are loaded)
   for (const task of project.tasks ?? []) {
     if (task.assignee && !seen.has(task.assignee.id)) {
       seen.add(task.assignee.id);
@@ -20,7 +29,7 @@ function ProjectAssignees({ project }: { project: Project }) {
     }
   }
 
-  // Include owner only if they aren't already listed as a task assignee
+  // Include owner if not already shown
   if (project.owner && !seen.has(project.owner.id)) {
     members.unshift({ id: project.owner.id, name: project.owner.name });
   }

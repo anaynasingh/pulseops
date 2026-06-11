@@ -107,8 +107,7 @@ class ProjectKanbanOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     owner: Optional["UserOut"] = None
-    # These are intentionally absent — the Kanban board doesn't need them
-    # and loading them costs 3-5 seconds due to multiple Supabase round trips
+    assignees: List["UserOut"] = []   # all people with tasks in this project
     tasks: List = []
     insights: List = []
     health_records: List = []
@@ -134,6 +133,7 @@ class ProjectKanbanOut(BaseModel):
             "created_at": obj.created_at,
             "updated_at": obj.updated_at,
             "owner": UserOut.model_validate(obj.owner) if obj.owner else None,
+            "assignees": [],  # populated separately in the kanban endpoint
             "tasks": [],
             "insights": [],
             "health_records": [],
