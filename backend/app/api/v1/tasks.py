@@ -53,6 +53,15 @@ async def create_task(
     return TaskOut.model_validate(result.scalar_one())
 
 
+def _can_edit_task(task: Task, user: User) -> bool:
+    """Guardrail: only assignee or creator can edit/delete a task."""
+    return (
+        task.assigned_to == user.id or
+        task.created_by == user.id or
+        user.role.value == "admin"   # admins can edit anything
+    )
+
+
 @router.patch("/{task_id}", response_model=TaskOut)
 async def update_task(
     task_id: UUID,
@@ -64,6 +73,12 @@ async def update_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if not _can_edit_task(task, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail=f"You can only edit tasks assigned to you or created by you. This task belongs to someone else."
+        )
 
     update_data = payload.model_dump(exclude_unset=True)
     if "is_completed" in update_data and update_data["is_completed"] and not task.is_completed:
@@ -89,5 +104,12 @@ async def delete_task(
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if not _can_edit_task(task, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete tasks assigned to you or created by you."
+        )
+
     await db.delete(task)
     await db.commit()
