@@ -168,58 +168,49 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                     )}
                   </div>
 
-                  {/* Inline edit panel — expands on title click */}
+                  {/* Inline quick-edit — compact pill row */}
                   {editingId === task.id && (
-                    <div className={`mt-3 p-3 rounded-lg border space-y-2 ${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-800/60 border-slate-700"}`}>
-                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${isLight ? "text-slate-500" : "text-slate-400"}`}>Reassign / Move</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className={`text-[11px] block mb-1 ${isLight ? "text-slate-500" : "text-slate-400"}`}>Assigned to</label>
-                          <select
-                            defaultValue={task.assigned_to ?? ""}
-                            onChange={(e) => updateMutation.mutate({ id: task.id, data: { assigned_to: e.target.value || null } })}
-                            className={`w-full text-xs rounded-md px-2 py-1.5 border focus:outline-none ${isLight ? "bg-white border-slate-300 text-slate-900" : "bg-slate-900 border-slate-600 text-white"}`}
-                          >
-                            <option value="">Unassigned</option>
-                            {(users as any[]).map((u: any) => (
-                              <option key={u.id} value={u.id}>{u.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className={`text-[11px] block mb-1 ${isLight ? "text-slate-500" : "text-slate-400"}`}>Move to project</label>
-                          <select
-                            defaultValue={(task.project as any)?.id ?? ""}
-                            onChange={(e) => { if (e.target.value) updateMutation.mutate({ id: task.id, data: { project_id: e.target.value } }); }}
-                            className={`w-full text-xs rounded-md px-2 py-1.5 border focus:outline-none ${isLight ? "bg-white border-slate-300 text-slate-900" : "bg-slate-900 border-slate-600 text-white"}`}
-                          >
-                            {(allProjects as any[]).map((p: any) => (
-                              <option key={p.id} value={p.id}>{p.title}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      {/* Private toggle */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{taskIsPrivate ? "🔒" : "👁"}</span>
-                          <span className={`text-[11px] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
-                            {taskIsPrivate ? "Private — only you can see this" : "Visible to whole team"}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => togglePrivate(task.id, taskIsPrivate)}
-                          className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
-                            taskIsPrivate
-                              ? isLight ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-amber-900/30 border-amber-700 text-amber-400"
-                              : isLight ? "bg-slate-100 border-slate-300 text-slate-600" : "bg-slate-800 border-slate-600 text-slate-400"
-                          }`}
-                        >
-                          {taskIsPrivate ? "Make public" : "Make private"}
-                        </button>
-                      </div>
-                      <button onClick={() => setEditingId(null)} className={`text-[11px] ${isLight ? "text-slate-400 hover:text-slate-600" : "text-slate-500 hover:text-slate-300"}`}>
-                        Done ↑
+                    <div className={`mt-2 flex flex-wrap items-center gap-2 text-xs`}>
+                      {/* Assignee */}
+                      <select
+                        defaultValue={task.assigned_to ?? ""}
+                        onChange={(e) => updateMutation.mutate({ id: task.id, data: { assigned_to: e.target.value || null } })}
+                        className={`text-xs rounded-full px-2.5 py-1 border focus:outline-none cursor-pointer ${isLight ? "bg-white border-slate-300 text-slate-700" : "bg-slate-900 border-slate-600 text-slate-300"}`}
+                        title="Assign to"
+                      >
+                        <option value="">👤 Unassigned</option>
+                        {(users as any[]).map((u: any) => (
+                          <option key={u.id} value={u.id}>👤 {u.name.split(" ")[0]}</option>
+                        ))}
+                      </select>
+
+                      {/* Move project */}
+                      <select
+                        defaultValue={(task.project as any)?.id ?? ""}
+                        onChange={(e) => { if (e.target.value) updateMutation.mutate({ id: task.id, data: { project_id: e.target.value } }); }}
+                        className={`text-xs rounded-full px-2.5 py-1 border focus:outline-none cursor-pointer max-w-[160px] truncate ${isLight ? "bg-white border-slate-300 text-slate-700" : "bg-slate-900 border-slate-600 text-slate-300"}`}
+                        title="Move to project"
+                      >
+                        {(allProjects as any[]).map((p: any) => (
+                          <option key={p.id} value={p.id}>◈ {p.title}</option>
+                        ))}
+                      </select>
+
+                      {/* Private toggle pill */}
+                      <button
+                        onClick={() => togglePrivate(task.id, taskIsPrivate)}
+                        className={`rounded-full px-2.5 py-1 border transition-colors cursor-pointer ${
+                          taskIsPrivate
+                            ? isLight ? "bg-amber-100 border-amber-300 text-amber-700" : "bg-amber-900/40 border-amber-600 text-amber-400"
+                            : isLight ? "bg-white border-slate-300 text-slate-500 hover:border-slate-400" : "bg-slate-900 border-slate-600 text-slate-400 hover:border-slate-500"
+                        }`}
+                      >
+                        {taskIsPrivate ? "🔒 Private" : "👁 Public"}
+                      </button>
+
+                      {/* Close */}
+                      <button onClick={() => setEditingId(null)} className={`text-[11px] ${isLight ? "text-slate-400 hover:text-slate-600" : "text-slate-600 hover:text-slate-400"}`}>
+                        ✕
                       </button>
                     </div>
                   )}
