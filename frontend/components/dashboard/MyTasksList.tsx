@@ -208,10 +208,6 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                         {taskIsPrivate ? "🔒 Private" : "👁 Public"}
                       </button>
 
-                      {/* Close */}
-                      <button onClick={() => setEditingId(null)} className={`text-[11px] ${isLight ? "text-slate-400 hover:text-slate-600" : "text-slate-600 hover:text-slate-400"}`}>
-                        ✕
-                      </button>
                     </div>
                   )}
                 </div>
