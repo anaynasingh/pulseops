@@ -133,7 +133,7 @@ class ProjectKanbanOut(BaseModel):
             "kanban_order": obj.kanban_order,
             "created_at": obj.created_at,
             "updated_at": obj.updated_at,
-            "owner": None,  # not loaded in kanban view for speed
+            "owner": UserOut.model_validate(obj.owner) if obj.owner else None,
             "tasks": [],
             "insights": [],
             "health_records": [],

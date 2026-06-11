@@ -49,6 +49,7 @@ async def list_projects_kanban(
 
     query = (
         select(Project)
+        .options(selectinload(Project.owner))  # owner name needed for Kanban card
         .order_by(Project.kanban_order, Project.updated_at.desc())
     )
     if status:
