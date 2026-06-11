@@ -2,18 +2,18 @@
 Task Planner MCP Server — mounted directly on the FastAPI backend.
 
 Users connect with:
-  claude mcp add task-planner https://<backend>/mcp \
+  claude mcp add task-planner --transport sse <backend>/mcp/sse \
     --header "X-Email: you@prospect33.com" \
     --header "X-Password: YourPassword"
 
-The server authenticates each request using those headers, so every
-user sees only their own tasks and projects.
+Claude sends these headers with EVERY request automatically.
+Tools read them from the request context — no need to pass as parameters.
 """
 from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 
@@ -23,12 +23,25 @@ from app.models.models import (
 )
 from app.core.security import verify_password
 
-mcp = FastMCP("Task Planner", stateless_http=True)
+mcp = FastMCP("Task Planner")
 
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
+# ── Auth helpers ──────────────────────────────────────────────────────────────
 
-async def _authenticate(email: str | None, password: str | None) -> User | None:
+async def _get_credentials(ctx: Context):
+    """Extract X-Email and X-Password from request headers."""
+    try:
+        headers = dict(ctx.request_context.request.headers)
+        email = headers.get("x-email") or headers.get("X-Email")
+        password = headers.get("x-password") or headers.get("X-Password")
+        return email, password
+    except Exception:
+        return None, None
+
+
+async def _authenticate_ctx(ctx: Context) -> User | None:
+    """Authenticate from request context headers."""
+    email, password = await _get_credentials(ctx)
     if not email or not password:
         return None
     async with AsyncSessionLocal() as db:
@@ -43,10 +56,13 @@ async def _authenticate(email: str | None, password: str | None) -> User | None:
 
 def _auth_error() -> str:
     return (
-        "❌ Not authenticated. Connect with your credentials:\n\n"
-        "  claude mcp add task-planner https://backend-production-ff8e.up.railway.app/mcp \\\n"
+        "❌ Not authenticated. Make sure you connected with your credentials:\n\n"
+        "  claude mcp remove task-planner\n"
+        '  claude mcp add task-planner --transport sse \\\n'
+        "    https://backend-production-ff8e.up.railway.app/mcp/sse \\\n"
         '    --header "X-Email: you@prospect33.com" \\\n'
-        '    --header "X-Password: YourPassword"'
+        '    --header "X-Password: YourPassword"\n\n'
+        "Then restart Claude Code."
     )
 
 
@@ -54,8 +70,7 @@ def _auth_error() -> str:
 
 @mcp.tool()
 async def list_my_tasks(
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
+    ctx: Context,
     status: Optional[str] = None,
     priority: Optional[str] = None,
     overdue_only: bool = False,
@@ -66,7 +81,7 @@ async def list_my_tasks(
     - priority: low / medium / high / urgent
     - overdue_only: true to see only past-deadline tasks
     """
-    user = await _authenticate(x_email, x_password)
+    user = await _authenticate_ctx(ctx)
     if not user:
         return _auth_error()
 
@@ -105,12 +120,9 @@ async def list_my_tasks(
 
 
 @mcp.tool()
-async def list_my_projects(
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
-) -> str:
+async def list_my_projects(ctx: Context) -> str:
     """List projects you own or have tasks assigned in."""
-    user = await _authenticate(x_email, x_password)
+    user = await _authenticate_ctx(ctx)
     if not user:
         return _auth_error()
 
@@ -139,10 +151,9 @@ async def list_my_projects(
 
 @mcp.tool()
 async def create_task(
+    ctx: Context,
     title: str,
     project_name: str,
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
     priority: str = "medium",
     description: Optional[str] = None,
     due_date: Optional[str] = None,
@@ -155,7 +166,7 @@ async def create_task(
     due_date: YYYY-MM-DD.
     assignee_email: who to assign it to (defaults to you).
     """
-    user = await _authenticate(x_email, x_password)
+    user = await _authenticate_ctx(ctx)
     if not user:
         return _auth_error()
 
@@ -187,14 +198,9 @@ async def create_task(
                 pass
 
         task = Task(
-            title=title,
-            description=description,
-            status=ProjectStatus.todo,
-            priority=pri,
-            project_id=proj.id,
-            assigned_to=assignee_id,
-            due_date=parsed_due,
-            created_by=user.id,
+            title=title, description=description, status=ProjectStatus.todo,
+            priority=pri, project_id=proj.id, assigned_to=assignee_id,
+            due_date=parsed_due, created_by=user.id,
         )
         db.add(task)
         await db.commit()
@@ -204,22 +210,20 @@ async def create_task(
 
 @mcp.tool()
 async def create_tasks_bulk(
+    ctx: Context,
     tasks_json: str,
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
     skip_dedup: bool = False,
 ) -> str:
     """
     Create multiple tasks at once — ideal after summarising a meeting.
-    Automatically checks for duplicates before creating. Skips tasks that
-    already exist (confidence >= 85%) and reports what was skipped.
+    Automatically checks for duplicates before creating.
 
     Pass a JSON array:
     [{"title":"...", "project_name":"...", "priority":"high", "due_date":"2026-06-15", "assignee_email":"..."}]
 
     Set skip_dedup=True to bypass the duplicate check and create everything.
     """
-    user = await _authenticate(x_email, x_password)
+    user = await _authenticate_ctx(ctx)
     if not user:
         return _auth_error()
 
@@ -232,7 +236,6 @@ async def create_tasks_bulk(
     if not items:
         return "No tasks to create."
 
-    # ── Dedup check ──────────────────────────────────────────────────────────
     skipped = []
     to_create = items[:]
 
@@ -240,16 +243,13 @@ async def create_tasks_bulk(
         try:
             from app.api.v1.ai import _DEDUPE_SYSTEM
             from app.services.ai_service import client as _client, MODEL as _MODEL
-            from sqlalchemy import select as _select
 
             async with AsyncSessionLocal() as db:
-                from app.models.models import Task as _Task, ProjectStatus as _PS
-                assigned_ids = _select(_Task.project_id).where(_Task.assigned_to == user.id).scalar_subquery()
+                assigned_ids = select(Task.project_id).where(Task.assigned_to == user.id).scalar_subquery()
                 existing_res = await db.execute(
-                    _select(_Task).where(
-                        _Task.is_completed == False,
-                        _Task.status != "cancelled",
-                        _Task.project_id.in_(assigned_ids),
+                    select(Task).where(
+                        Task.is_completed == False, Task.status != "cancelled",
+                        Task.project_id.in_(assigned_ids),
                     ).limit(80)
                 )
                 existing = existing_res.scalars().all()
@@ -257,20 +257,16 @@ async def create_tasks_bulk(
             if existing:
                 existing_list = "\n".join([f'- [{t.id}] "{t.title}" | {t.status.value}' for t in existing])
                 proposed_list = "\n".join([f'- "{item.get("title", "")}"' for item in items])
-
                 resp = await _client.chat.completions.create(
                     model=_MODEL,
                     messages=[
                         {"role": "system", "content": _DEDUPE_SYSTEM},
                         {"role": "user", "content": f"EXISTING:\n{existing_list}\n\nPROPOSED:\n{proposed_list}"},
                     ],
-                    response_format={"type": "json_object"},
-                    temperature=0.1,
+                    response_format={"type": "json_object"}, temperature=0.1,
                 )
                 raw = _json.loads(resp.choices[0].message.content)
                 matches = raw.get("matches", raw) if isinstance(raw, dict) else raw
-
-                # Filter out high-confidence duplicates
                 skip_titles = {
                     m["proposed_title"]
                     for m in matches
@@ -278,30 +274,22 @@ async def create_tasks_bulk(
                 }
                 skipped_matches = [m for m in matches if m["proposed_title"] in skip_titles]
                 to_create = [item for item in items if item.get("title") not in skip_titles]
-
                 for m in skipped_matches:
                     skipped.append(f'  ↩ Skipped "{m["proposed_title"]}" — {m.get("suggestion", "already exists")}')
-
         except Exception as e:
-            # Dedup check failed — create everything and warn
-            skipped.append(f"  ⚠ Dedup check failed ({e}) — created all tasks without checking")
+            skipped.append(f"  ⚠ Dedup check failed ({e}) — created all tasks")
 
-    # ── Create remaining tasks ───────────────────────────────────────────────
     results = []
     for item in to_create:
         r = await create_task(
-            title=item.get("title", "Untitled"),
+            ctx=ctx, title=item.get("title", "Untitled"),
             project_name=item.get("project_name", "Task Planner App"),
-            x_email=x_email,
-            x_password=x_password,
             priority=item.get("priority", "medium"),
-            description=item.get("description"),
-            due_date=item.get("due_date"),
+            description=item.get("description"), due_date=item.get("due_date"),
             assignee_email=item.get("assignee_email"),
         )
         results.append(r)
 
-    # ── Summary ──────────────────────────────────────────────────────────────
     lines = []
     if results:
         lines.append(f"✅ Created {len(results)} task(s):")
@@ -311,34 +299,25 @@ async def create_tasks_bulk(
         lines.extend(skipped)
     if not results and not skipped:
         lines.append("Nothing to create.")
-
     return "\n".join(lines)
 
 
 @mcp.tool()
-async def complete_task(
-    task_title_or_id: str,
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
-) -> str:
+async def complete_task(ctx: Context, task_title_or_id: str) -> str:
     """Mark a task as complete by title (partial match) or UUID."""
-    user = await _authenticate(x_email, x_password)
+    user = await _authenticate_ctx(ctx)
     if not user:
         return _auth_error()
 
     async with AsyncSessionLocal() as db:
         task = None
         try:
-            uid = UUID(task_title_or_id)
-            task = (await db.execute(select(Task).where(Task.id == uid))).scalar_one_or_none()
+            task = (await db.execute(select(Task).where(Task.id == UUID(task_title_or_id)))).scalar_one_or_none()
         except ValueError:
             pass
         if not task:
             task = (await db.execute(
-                select(Task).where(
-                    Task.title.ilike(f"%{task_title_or_id}%"),
-                    Task.is_completed == False
-                ).limit(1)
+                select(Task).where(Task.title.ilike(f"%{task_title_or_id}%"), Task.is_completed == False).limit(1)
             )).scalar_one_or_none()
         if not task:
             return f"❌ No task matching '{task_title_or_id}'."
@@ -352,17 +331,12 @@ async def complete_task(
 
 
 @mcp.tool()
-async def update_task_status(
-    task_title_or_id: str,
-    new_status: str,
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
-) -> str:
+async def update_task_status(ctx: Context, task_title_or_id: str, new_status: str) -> str:
     """
     Update task status.
     Valid: todo / in_progress / blocked / review / done / cancelled
     """
-    user = await _authenticate(x_email, x_password)
+    user = await _authenticate_ctx(ctx)
     if not user:
         return _auth_error()
 
@@ -393,108 +367,9 @@ async def update_task_status(
 
 
 @mcp.tool()
-async def log_transcript_search(
-    searched_for: str,
-    got_back: str,
-    was_correct: bool,
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
-    note: Optional[str] = None,
-    attendees: Optional[str] = None,
-    meeting_date: Optional[str] = None,
-) -> str:
-    """
-    Log whether Microsoft Graph returned the right meeting transcript.
-    Call this EVERY TIME you fetch a transcript via the M365 connector.
-
-    searched_for: what you asked for (e.g. 'June 10 dev meeting 9am')
-    got_back: what Graph actually returned (meeting title/date)
-    was_correct: True if it was the right transcript, False if wrong
-    note: if wrong, describe what was off (e.g. 'got last week meeting instead')
-    attendees: comma-separated list of attendees in the returned transcript
-    meeting_date: date of the meeting that was returned (YYYY-MM-DD)
-
-    This builds a dataset so we can find the pattern in Graph API errors.
-    Mark: 'It shouldn't be entirely random — maybe there's a pattern.'
-    """
-    user = await _authenticate(x_email, x_password)
-
-    async with AsyncSessionLocal() as db:
-        log = TranscriptSearchLog(
-            user_id=user.id if user else None,
-            search_query=searched_for,
-            returned_title=got_back,
-            returned_date=meeting_date,
-            returned_attendees=[a.strip() for a in (attendees or "").split(",") if a.strip()],
-            source="mcp",
-            was_correct=was_correct,
-            correction_note=note,
-        )
-        db.add(log)
-        await db.commit()
-
-    status = "correct" if was_correct else "WRONG"
-    msg = f"Logged [{status}]: searched '{searched_for}', got '{got_back}'"
-    if not was_correct and note:
-        msg += f" — note: {note}"
-    return msg
-
-
-@mcp.tool()
-async def get_transcript_diagnostics(
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
-) -> str:
-    """
-    Show a diagnostic report of all transcript searches — accuracy rate,
-    wrong cases, patterns. Use this to analyse why Graph returns wrong meetings.
-    """
-    user = await _authenticate(x_email, x_password)
-    if not user:
-        return _auth_error()
-
-    async with AsyncSessionLocal() as db:
-        from sqlalchemy import select as sa_select
-        result = await db.execute(
-            sa_select(TranscriptSearchLog)
-            .order_by(TranscriptSearchLog.created_at.desc())
-            .limit(50)
-        )
-        logs = result.scalars().all()
-
-    total = len(logs)
-    correct = sum(1 for l in logs if l.was_correct is True)
-    wrong = sum(1 for l in logs if l.was_correct is False)
-    unreviewed = sum(1 for l in logs if l.was_correct is None)
-    acc = round((correct / max(correct + wrong, 1)) * 100)
-
-    lines = [
-        f"**Transcript Search Diagnostics** ({total} total searches)",
-        f"Accuracy: {acc}% | Correct: {correct} | Wrong: {wrong} | Unreviewed: {unreviewed}",
-        "",
-    ]
-
-    wrong_cases = [l for l in logs if l.was_correct is False]
-    if wrong_cases:
-        lines.append(f"**Wrong cases ({len(wrong_cases)}):**")
-        for l in wrong_cases:
-            lines.append(f"  • Searched: '{l.search_query}' → Got: '{l.returned_title}' | {l.returned_date or '?'}")
-            if l.correction_note:
-                lines.append(f"    Note: {l.correction_note}")
-    else:
-        lines.append("No wrong cases logged yet.")
-
-    return "\n".join(lines)
-
-
-@mcp.tool()
-async def get_project_summary(
-    project_name: str,
-    x_email: Optional[str] = None,
-    x_password: Optional[str] = None,
-) -> str:
+async def get_project_summary(ctx: Context, project_name: str) -> str:
     """Get full summary of a project — tasks, progress, blockers."""
-    user = await _authenticate(x_email, x_password)
+    user = await _authenticate_ctx(ctx)
     if not user:
         return _auth_error()
 
@@ -527,4 +402,71 @@ async def get_project_summary(
             who = t.assignee.name.split()[0] if t.assignee else "?"
             due = f" due {t.due_date}" if t.due_date else ""
             lines.append(f"  • [{t.priority.value}] {t.title} ({who}{due})")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def log_transcript_search(
+    ctx: Context,
+    searched_for: str,
+    got_back: str,
+    was_correct: bool,
+    note: Optional[str] = None,
+    attendees: Optional[str] = None,
+    meeting_date: Optional[str] = None,
+) -> str:
+    """
+    Log whether Microsoft Graph returned the right meeting transcript.
+    Call this EVERY TIME you fetch a transcript via the M365 connector.
+    This builds a dataset to find patterns in Graph API errors.
+    """
+    user = await _authenticate_ctx(ctx)
+
+    async with AsyncSessionLocal() as db:
+        log = TranscriptSearchLog(
+            user_id=user.id if user else None,
+            search_query=searched_for, returned_title=got_back,
+            returned_date=meeting_date,
+            returned_attendees=[a.strip() for a in (attendees or "").split(",") if a.strip()],
+            source="mcp", was_correct=was_correct, correction_note=note,
+        )
+        db.add(log)
+        await db.commit()
+
+    status = "correct" if was_correct else "WRONG"
+    msg = f"Logged [{status}]: searched '{searched_for}', got '{got_back}'"
+    if not was_correct and note:
+        msg += f" — note: {note}"
+    return msg
+
+
+@mcp.tool()
+async def get_transcript_diagnostics(ctx: Context) -> str:
+    """Show accuracy report for transcript searches — find patterns in Graph API errors."""
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import select as sa_select
+        result = await db.execute(
+            sa_select(TranscriptSearchLog).order_by(TranscriptSearchLog.created_at.desc()).limit(50)
+        )
+        logs = result.scalars().all()
+
+    total = len(logs)
+    correct = sum(1 for l in logs if l.was_correct is True)
+    wrong = sum(1 for l in logs if l.was_correct is False)
+    acc = round((correct / max(correct + wrong, 1)) * 100)
+
+    lines = [
+        f"**Transcript Search Diagnostics** ({total} total)",
+        f"Accuracy: {acc}% | Correct: {correct} | Wrong: {wrong}",
+        "",
+    ]
+    wrong_cases = [l for l in logs if l.was_correct is False]
+    if wrong_cases:
+        lines.append(f"**Wrong cases ({len(wrong_cases)}):**")
+        for l in wrong_cases:
+            lines.append(f"  • Searched: '{l.search_query}' → Got: '{l.returned_title}' | {l.returned_date or '?'}")
+            if l.correction_note:
+                lines.append(f"    Note: {l.correction_note}")
+    else:
+        lines.append("No wrong cases logged yet.")
     return "\n".join(lines)
