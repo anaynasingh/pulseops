@@ -74,7 +74,7 @@ export function DedupeModal({ result, projectId, onDone, onCancel }: DedupeModal
     },
   });
 
-  const hasActions = result.matches.some(m => decisions[m.proposed_title] !== "skip");
+  const hasActions = result.matches.length > 0; // always enabled — skip is a valid decision
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -188,7 +188,11 @@ export function DedupeModal({ result, projectId, onDone, onCancel }: DedupeModal
               disabled={applyMutation.isPending || !hasActions}
               className="px-5 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
             >
-              {applyMutation.isPending ? "Applying…" : "Confirm & Apply"}
+              {applyMutation.isPending
+                ? "Applying…"
+                : Object.values(decisions).every(d => d === "skip")
+                ? "Confirm (skip all)"
+                : "Confirm & Apply"}
             </button>
           </div>
         </div>
