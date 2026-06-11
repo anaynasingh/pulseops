@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 import time
 from app.db.session import get_db
 from app.models.models import Project, Task, ActivityLog, ProjectStatus, PriorityLevel, User
-from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectKanbanOut
+from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectKanbanOut, UserOut
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
