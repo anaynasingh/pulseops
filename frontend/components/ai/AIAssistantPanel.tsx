@@ -20,6 +20,7 @@ interface ProposedTask {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  checking?: boolean;   // true while dedup is running
   // for propose_tasks action
   proposedTasks?: ProposedTask[];
   proposedProjectId?: string | null;
@@ -65,33 +66,28 @@ export function AIAssistantPanel() {
       const res = await aiApi.chat(text);
 
       if (res.action === "propose_tasks" && res.proposed_tasks?.length > 0) {
-        // Run dedup check before showing proposed tasks to user
-        setMessages((m) => [...m, { role: "assistant", content: res.reply + "\n\n_Checking for duplicates…_" }]);
+        // Add the reply first, with a checking indicator
+        setMessages((m) => [...m, { role: "assistant", content: res.reply, checking: true }]);
         try {
           const dedup = await aiApi.checkDuplicates(res.proposed_tasks, text);
           const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
           if (hasIssues) {
-            // Show dedup modal for user to confirm
             setDedupeResult(dedup);
             setDedupeProjectId(res.project_id || undefined);
             setMessages((m) => m.map((msg, i) =>
-              i === m.length - 1
-                ? { ...msg, content: res.reply + `\n\n✦ _Smart check found ${dedup.duplicates_found} duplicate(s) and ${dedup.updates_suggested} update suggestion(s). Review below._` }
-                : msg
+              i === m.length - 1 ? { ...msg, checking: false } : msg
             ));
           } else {
-            // All new — proceed as normal
             setMessages((m) => m.map((msg, i) =>
               i === m.length - 1
-                ? { ...msg, content: res.reply, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
+                ? { ...msg, checking: false, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
                 : msg
             ));
           }
         } catch {
-          // Dedup check failed — proceed without it
           setMessages((m) => m.map((msg, i) =>
             i === m.length - 1
-              ? { ...msg, content: res.reply, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
+              ? { ...msg, checking: false, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
               : msg
           ));
         }
@@ -168,6 +164,18 @@ export function AIAssistantPanel() {
               )}
               {msg.content}
             </div>
+
+            {/* Dedup checking indicator */}
+            {msg.checking && (
+              <div className="mt-2 flex items-center gap-2 px-1">
+                <div className="flex gap-0.5">
+                  {[0,1,2].map(i => (
+                    <div key={i} className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                  ))}
+                </div>
+                <span className="text-[11px] text-indigo-400">Checking for duplicates…</span>
+              </div>
+            )}
 
             {/* Task proposal UI */}
             {msg.proposedTasks && msg.proposedTasks.length > 0 && !msg.tasksConfirmed && (
