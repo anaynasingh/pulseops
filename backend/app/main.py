@@ -14,11 +14,57 @@ except Exception:
     pass
 # ──────────────────────────────────────────────────────────────────────────────
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Scope, Receive, Send
 from app.core.config import settings
 from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics, users
+
+
+class SSEKeepAliveMiddleware:
+    """
+    Sends SSE comment pings every INTERVAL seconds so Railway's proxy never
+    kills idle SSE connections mid-handshake or mid-session.
+    """
+    def __init__(self, app: ASGIApp, interval: float = 20.0):
+        self.app = app
+        self.interval = interval
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http" or not scope.get("path", "").endswith("/sse"):
+            await self.app(scope, receive, send)
+            return
+
+        lock = anyio.Lock()
+        done = False
+
+        async def safe_send(message):
+            async with lock:
+                await send(message)
+
+        async def ping_loop(*, task_status=anyio.TASK_STATUS_IGNORED):
+            task_status.started()
+            while not done:
+                await anyio.sleep(self.interval)
+                if done:
+                    break
+                try:
+                    async with lock:
+                        await send({
+                            "type": "http.response.body",
+                            "body": b": ping\n\n",
+                            "more_body": True,
+                        })
+                except Exception:
+                    break
+
+        async with anyio.create_task_group() as tg:
+            await tg.start(ping_loop)
+            await self.app(scope, receive, safe_send)
+            done = True
+            tg.cancel_scope.cancel()
 
 
 class MCPHeaderMiddleware(BaseHTTPMiddleware):
@@ -87,9 +133,9 @@ async def root():
 # streamable_http_app() requires its own lifecycle (run()) and fails embedded.
 try:
     from app.api.v1.mcp_server import mcp
-    app.mount("/mcp", mcp.sse_app())
+    app.mount("/mcp", SSEKeepAliveMiddleware(mcp.sse_app()))
     import logging
-    logging.getLogger(__name__).info("MCP server mounted at /mcp (SSE transport)")
+    logging.getLogger(__name__).info("MCP server mounted at /mcp (SSE + keep-alive)")
 except Exception as e:
     import logging
     logging.getLogger(__name__).error(f"MCP server failed to mount: {e}")
