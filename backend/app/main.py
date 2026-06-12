@@ -128,7 +128,15 @@ app.include_router(users.router, prefix=PREFIX)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "service": "PulseOps API", "version": "1.0.0"}
+    import mcp as _mcp
+    import mcp.types as _t
+    return {
+        "status": "ok",
+        "service": "PulseOps API",
+        "version": "1.0.0",
+        "mcp_version": getattr(_mcp, "__version__", "unknown"),
+        "mcp_protocol": getattr(_t, "LATEST_PROTOCOL_VERSION", "unknown"),
+    }
 
 
 @app.get("/")
