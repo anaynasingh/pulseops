@@ -17,7 +17,6 @@ except Exception:
 import anyio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp, Scope, Receive, Send
 from app.core.config import settings
 from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics, users
@@ -67,19 +66,31 @@ class SSEKeepAliveMiddleware:
             tg.cancel_scope.cancel()
 
 
-class MCPHeaderMiddleware(BaseHTTPMiddleware):
-    """Capture X-Email and X-Password headers into ContextVars for MCP tools."""
-    async def dispatch(self, request: Request, call_next):
-        from app.api.v1.mcp_server import mcp_email_var, mcp_password_var
-        email = request.headers.get("x-email")
-        password = request.headers.get("x-password")
-        t_email = mcp_email_var.set(email)
-        t_password = mcp_password_var.set(password)
-        try:
-            return await call_next(request)
-        finally:
-            mcp_email_var.reset(t_email)
-            mcp_password_var.reset(t_password)
+class MCPHeaderMiddleware:
+    """
+    Pure ASGI middleware — reads X-Email/X-Password headers from the ASGI scope
+    and stores them in ContextVars before every request.
+    Uses raw ASGI (not BaseHTTPMiddleware) so receive/send are never wrapped,
+    avoiding body-buffering issues with ASGI-mounted sub-apps like FastMCP.
+    """
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] == "http":
+            from app.api.v1.mcp_server import mcp_email_var, mcp_password_var
+            headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            email = headers.get(b"x-email", b"").decode() or None
+            password = headers.get(b"x-password", b"").decode() or None
+            t_email = mcp_email_var.set(email)
+            t_password = mcp_password_var.set(password)
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                mcp_email_var.reset(t_email)
+                mcp_password_var.reset(t_password)
+        else:
+            await self.app(scope, receive, send)
 
 app = FastAPI(
     title="PulseOps API",
@@ -91,7 +102,7 @@ app = FastAPI(
     root_path_in_servers=False,
 )
 
-# Capture MCP auth headers before every request
+# Capture MCP auth headers before every request (pure ASGI, not BaseHTTPMiddleware)
 app.add_middleware(MCPHeaderMiddleware)
 
 # CORS
