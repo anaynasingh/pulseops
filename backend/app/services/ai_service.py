@@ -85,15 +85,17 @@ async def chat_completion(
     system_prompt: str,
     user_prompt: str,
     temperature: float = 0.5,
+    history: list[dict] | None = None,
 ) -> str:
     """Plain text completion — for summaries, reports, free-form answers."""
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user_prompt})
     response = await client.chat.completions.create(
         model=MODEL,
         temperature=temperature,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        messages=messages,
     )
     return response.choices[0].message.content.strip()
 

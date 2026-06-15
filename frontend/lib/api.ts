@@ -79,8 +79,8 @@ export const tasksApi = {
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 export const aiApi = {
-  chat: (message: string, project_id?: string) =>
-    api.post("/ai/chat", { message, project_id }).then((r) => r.data),
+  chat: (message: string, project_id?: string, history?: { role: string; content: string }[]) =>
+    api.post("/ai/chat", { message, project_id, history }).then((r) => r.data),
   intake: (raw_input: string, team_id?: string) =>
     api.post("/ai/intake", { raw_input, team_id }).then((r) => r.data),
   confirmIntake: (intake_id: string, data: Record<string, unknown>) =>

@@ -642,6 +642,7 @@ Format as a numbered list."""
 class _ChatRequest(BaseModel):
     message: str
     project_id: Optional[str] = None
+    history: List[dict] = []  # [{role: "user"|"assistant", content: str}]
 
 
 class _IntentOutput(BaseModel):
@@ -802,6 +803,7 @@ Answer questions about the workspace directly and concisely. Use bullet points w
         system_prompt=f"{CHAT_SYSTEM}\n\nContext:\n{context}",
         user_prompt=payload.message,
         temperature=0.4,
+        history=payload.history[-20:] if payload.history else None,
     )
     return {"reply": answer}
 

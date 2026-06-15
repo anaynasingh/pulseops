@@ -63,7 +63,13 @@ export function AIAssistantPanel() {
     setLoading(true);
 
     try {
-      const res = await aiApi.chat(text);
+      // Build plain-text history from existing messages (skip initial greeting, cap at 20)
+      const history = messages
+        .filter((m) => m.content && !m.proposedTasks)
+        .slice(-20)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const res = await aiApi.chat(text, undefined, history);
 
       if (res.action === "propose_tasks" && res.proposed_tasks?.length > 0) {
         // Add the reply first, with a checking indicator
