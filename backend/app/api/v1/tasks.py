@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.models import Task, User
 from app.schemas.schemas import TaskCreate, TaskUpdate, TaskOut
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_db_for_user, require_writer
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -41,8 +41,8 @@ async def list_tasks(
 @router.post("/", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 async def create_task(
     payload: TaskCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_for_user),
+    current_user: User = Depends(require_writer),
 ):
     task = Task(**payload.model_dump(), created_by=current_user.id)
     db.add(task)
@@ -66,8 +66,8 @@ def _can_edit_task(task: Task, user: User) -> bool:
 async def update_task(
     task_id: UUID,
     payload: TaskUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_for_user),
+    current_user: User = Depends(require_writer),
 ):
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
@@ -121,8 +121,8 @@ async def update_task(
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
     task_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_for_user),
+    current_user: User = Depends(require_writer),
 ):
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()

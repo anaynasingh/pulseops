@@ -8,7 +8,7 @@ import time
 from app.db.session import get_db
 from app.models.models import Project, Task, ActivityLog, ProjectStatus, PriorityLevel, User
 from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectOut, ProjectKanbanOut, UserOut
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_db_for_user, require_writer
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -158,8 +158,8 @@ async def list_projects(
 @router.post("/", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 async def create_project(
     payload: ProjectCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_for_user),
+    current_user: User = Depends(require_writer),
 ):
     project = Project(**payload.model_dump(), created_by=current_user.id)
     db.add(project)
@@ -200,8 +200,8 @@ async def get_project(
 async def update_project(
     project_id: UUID,
     payload: ProjectUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_for_user),
+    current_user: User = Depends(require_writer),
 ):
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
@@ -237,8 +237,8 @@ async def update_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     project_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_for_user),
+    current_user: User = Depends(require_writer),
 ):
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
