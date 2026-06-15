@@ -10,7 +10,7 @@ Covers: authentication, task CRUD, privacy, project RBAC, chatbot, MCP (skipped)
 import pytest
 import httpx
 
-BASE = "http://localhost:8001/api/v1"
+BASE = "http://localhost:8002/api/v1"
 CLIENT = httpx.Client(timeout=30.0)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
