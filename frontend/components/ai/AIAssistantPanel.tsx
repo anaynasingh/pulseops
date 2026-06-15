@@ -38,18 +38,24 @@ const QUICK_PROMPTS = [
 export function AIAssistantPanel() {
   const { toggleAIAssistant } = useUIStore();
   const queryClient = useQueryClient();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?",
-    },
-  ]);
+  const STORAGE_KEY = "pulseops_chat_history";
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === "undefined") return [{ role: "assistant", content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [{ role: "assistant", content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }];
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [dedupeResult, setDedupeResult] = useState<any>(null);
   const [dedupeProjectId, setDedupeProjectId] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -134,6 +140,13 @@ export function AIAssistantPanel() {
         <span className="text-[10px] text-green-400 bg-green-900/30 border border-green-800/40 px-1.5 py-0.5 rounded">
           GPT-4o
         </span>
+        <button
+          onClick={() => { const initial = [{ role: "assistant" as const, content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }]; setMessages(initial); try { localStorage.removeItem(STORAGE_KEY); } catch {} }}
+          className="text-slate-600 hover:text-slate-400 transition-colors text-[10px]"
+          title="Clear chat"
+        >
+          clear
+        </button>
         <button onClick={toggleAIAssistant} className="text-slate-500 hover:text-white transition-colors ml-1">
           ×
         </button>
