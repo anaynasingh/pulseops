@@ -27,6 +27,7 @@ export interface Task {
   status: ProjectStatus;
   priority: PriorityLevel;
   assigned_to?: string;
+  created_by?: string;
   due_date?: string;
   is_completed: boolean;
   is_private: boolean;

@@ -221,6 +221,7 @@ class TaskOut(BaseModel):
     status: ProjectStatus
     priority: PriorityLevel
     assigned_to: Optional[UUID] = None
+    created_by: Optional[UUID] = None
     due_date: Optional[date] = None
     is_completed: bool
     is_private: bool = False

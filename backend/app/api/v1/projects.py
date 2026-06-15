@@ -12,6 +12,15 @@ from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
+
+def _can_edit_project(project: Project, user: User) -> bool:
+    """Hard control: only owner, creator, or admin may mutate a project."""
+    return (
+        project.owner_id == user.id or
+        project.created_by == user.id or
+        user.role.value == "admin"
+    )
+
 # ── Simple in-memory cache for kanban endpoint ────────────────────────────────
 # Supabase is in Sydney — each round trip adds 200-400ms latency.
 # Cache the kanban board for 30 seconds so navigating back is instant.
@@ -199,6 +208,12 @@ async def update_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if not _can_edit_project(project, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only edit projects you own or created."
+        )
+
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         old_val = str(getattr(project, field)) if field in ("status", "priority") else None
@@ -229,5 +244,12 @@ async def delete_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if not _can_edit_project(project, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete projects you own or created."
+        )
+
     await db.delete(project)
     await db.commit()

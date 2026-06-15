@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tasksApi, usersApi, projectsApi } from "@/lib/api";
 import { PRIORITY_CONFIG, PRIORITY_CONFIG_LIGHT } from "@/lib/types";
-import { useUIStore } from "@/lib/store";
+import { useAuthStore, useUIStore } from "@/lib/store";
 import { formatDate, getDaysUntil } from "@/lib/utils";
 import type { Task } from "@/lib/types";
 
 export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boolean }) {
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuthStore();
   const { theme } = useUIStore();
   const isLight = theme === "light";
   const PC = isLight ? PRIORITY_CONFIG_LIGHT : PRIORITY_CONFIG;
@@ -96,6 +97,8 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
             const pc = PC[task.priority] ?? PC.medium;
             // Use optimistic override if present, otherwise fall back to API value
             const taskIsPrivate = task.id in privateOverrides ? privateOverrides[task.id] : (task.is_private ?? false);
+            // Hard UI guardrail: only assignee or creator can edit
+            const canEdit = !currentUser || task.assigned_to === currentUser.id || task.created_by === currentUser.id;
 
             return (
               <div key={task.id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all duration-500 group ${
@@ -130,12 +133,14 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                       {task.priority.toUpperCase()}
                     </span>
                     <button
-                      onClick={() => setEditingId(editingId === task.id ? null : task.id)}
-                      className={`text-sm font-semibold leading-snug text-left hover:underline decoration-dotted underline-offset-2 flex items-center gap-1.5 ${
+                      onClick={() => canEdit && setEditingId(editingId === task.id ? null : task.id)}
+                      className={`text-sm font-semibold leading-snug text-left decoration-dotted underline-offset-2 flex items-center gap-1.5 ${
                         doneIds.has(task.id) ? "line-through opacity-40" :
-                        isLight ? "text-slate-900 hover:text-indigo-700" : "text-slate-100 hover:text-indigo-300"
+                        canEdit
+                          ? isLight ? "text-slate-900 hover:text-indigo-700 hover:underline" : "text-slate-100 hover:text-indigo-300 hover:underline"
+                          : isLight ? "text-slate-900 cursor-default" : "text-slate-100 cursor-default"
                       }`}
-                      title="Click to reassign or move project"
+                      title={canEdit ? "Click to reassign or move project" : "You can only edit tasks assigned to you"}
                     >
                       {taskIsPrivate && <span className="text-xs" title="Private task">🔒</span>}
                       {task.title}
@@ -168,8 +173,8 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                     )}
                   </div>
 
-                  {/* Inline quick-edit — compact pill row */}
-                  {editingId === task.id && (
+                  {/* Inline quick-edit — only shown for tasks the user owns */}
+                  {editingId === task.id && canEdit && (
                     <div className={`mt-2 flex flex-wrap items-center gap-2 text-xs`}>
                       {/* Assignee */}
                       <select
@@ -212,9 +217,9 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                   )}
                 </div>
 
-                {/* Retire */}
+                {/* Retire — only for tasks the user owns */}
                 <div className="shrink-0">
-                  {confirmRetire === task.id ? (
+                  {canEdit && confirmRetire === task.id ? (
                     <div className="flex items-center gap-1.5">
                       <span className={`text-xs ${isLight ? "text-slate-500" : "text-slate-500"}`}>Retire?</span>
                       <button onClick={() => handleRetire(task.id)}
@@ -226,7 +231,7 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                         No
                       </button>
                     </div>
-                  ) : (
+                  ) : canEdit ? (
                     <button onClick={() => setConfirmRetire(task.id)}
                       className={`opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 rounded-lg flex items-center justify-center ${isLight ? "text-slate-400 hover:text-red-600 hover:bg-red-50" : "text-slate-600 hover:text-amber-400 hover:bg-amber-900/20"}`}
                       title="Retire this task">
