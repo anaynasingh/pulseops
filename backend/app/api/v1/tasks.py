@@ -6,11 +6,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.db.session import get_db
-from app.models.models import Task, User
+from app.models.models import Task, User, ActivityLog
 from app.schemas.schemas import TaskCreate, TaskUpdate, TaskOut
 from app.core.deps import get_current_user, get_db_for_user, require_writer
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+async def _log_activity(db: AsyncSession, task_id, user_id, action: str, new_val: str = None):
+    """Record a task action in the activity feed (mirrors projects._log_activity)."""
+    db.add(ActivityLog(
+        entity_type="task",
+        entity_id=task_id,
+        user_id=user_id,
+        action=action,
+        new_value=new_val,
+    ))
 
 
 @router.get("/", response_model=List[TaskOut])
@@ -46,6 +57,8 @@ async def create_task(
 ):
     task = Task(**payload.model_dump(), created_by=current_user.id)
     db.add(task)
+    await db.flush()  # populate task.id before logging
+    await _log_activity(db, task.id, current_user.id, "task_created", task.title)
     await db.commit()
     result = await db.execute(
         select(Task).options(selectinload(Task.assignee), selectinload(Task.project)).where(Task.id == task.id)
@@ -87,6 +100,8 @@ async def update_task(
     for field, value in update_data.items():
         setattr(task, field, value)
 
+    action = "task_completed" if update_data.get("is_completed") is True else "task_updated"
+    await _log_activity(db, task.id, current_user.id, action, task.title)
     await db.commit()
 
     # Auto-recalculate project progress_pct whenever a task completion changes
@@ -135,5 +150,7 @@ async def delete_task(
             detail="You can only delete tasks assigned to you or created by you."
         )
 
+    title = task.title
     await db.delete(task)
+    await _log_activity(db, task_id, current_user.id, "task_deleted", title)
     await db.commit()
