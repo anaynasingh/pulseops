@@ -28,3 +28,5 @@ AIGILE_CORRECTIONS.md.aigile-backup
 .understand-anything/intermediate/
 .understand-anything/diff-overlay.json
 .understand-anything/tmp/
+!.aigile/delegation
+!.aigile/delegation/**
