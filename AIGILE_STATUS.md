@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Plan reference:** None
-**Next action:** Burst complete — hourly-reminders shipped (abandoned probe; built per git log). Ready for next burst.
-**Last updated:** 2026-06-23
+**Phase:** Building
+**Active burst:** microsoft-signin
+**Burst base:** 1d2f50bedce450dc6da6aedf240ad431942c917d
+**Plan reference:** AIGILE_PLAN/current/
+**Next action:** Build: Stream A (backend OAuth + migration), then Stream B (frontend login replacement)
+**Last updated:** 2026-06-24
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -34,7 +34,13 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-<!-- No active streams. -->
+**Stream backend-oauth builders:** claude
+**Stream backend-oauth handoff head:** None
+**Stream backend-oauth status:** IN PROGRESS
+
+**Stream frontend-login builders:** claude
+**Stream frontend-login handoff head:** None
+**Stream frontend-login status:** WAITING ON A
 
 ## Gemini Reviews
 
