@@ -14,15 +14,8 @@ from app.models.models import (
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class SignupRequest(BaseModel):
-    email: EmailStr
-    name: str
-    password: str = Field(min_length=8)
+class MicrosoftTokenRequest(BaseModel):
+    code: str
 
 
 class TokenResponse(BaseModel):
