@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Building
-**Active burst:** hourly-reminders
-**Burst base:** b0dd158eba8a6155881fcc21b6dfd592e20a0469
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Build: Stream A (notifications foundation), then Stream B (Railway Cron + reminder service) + Stream C (frontend bell) in parallel
-**Last updated:** 2026-06-04
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Plan reference:** None
+**Next action:** Burst complete — hourly-reminders shipped (abandoned probe; built per git log). Ready for next burst.
+**Last updated:** 2026-06-23
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -34,17 +34,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream notifications-foundation builders:** claude
-**Stream notifications-foundation handoff head:** None
-**Stream notifications-foundation status:** IN PROGRESS
-
-**Stream railway-cron builders:** claude
-**Stream railway-cron handoff head:** None
-**Stream railway-cron status:** WAITING ON A
-
-**Stream frontend-bell builders:** claude
-**Stream frontend-bell handoff head:** None
-**Stream frontend-bell status:** WAITING ON A
+<!-- No active streams. -->
 
 ## Gemini Reviews
 

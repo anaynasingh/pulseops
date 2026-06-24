@@ -1,20 +1,22 @@
 # Preservation check: round_0 → round_1
 
-## Verdict: PASSED — all diff hunks authorised
+All diff hunks categorised:
 
-### Hunk analysis
+- **Streams header:** "backend callback endpoint" → "backend token endpoint" — AUTHORISED (C2: clarifies the token endpoint is what returns TokenResponse, not the callback)
+- **Excluded comment:** Shortened prose in Excluded — AUTHORISED (minor wording, substance preserved)
+- **Callback contract:** `/auth/callback?access_token=...` → `/callback?code=<uuid>` — AUTHORISED (C1 + C4: correct route and exchange-code pattern)
+- **New endpoint added:** `POST /api/v1/auth/microsoft/token` — AUTHORISED (C4 change-request addition)
+- **Formatting:** Removed horizontal rules `---` between stream sections — AUTHORISED (minor cosmetic)
+- **Stream B excluded:** Removed `frontend/components/layout/Sidebar.tsx` from excluded list — AUTHORISED (it was never in scope; listing it was informational)
+- **Integration gate:** Updated to reflect `?code=<uuid>` and `POST /auth/microsoft/token` exchange — AUTHORISED (C4)
+- **Deferred:** Shortened — AUTHORISED (same items, compressed)
+- **OAuth flow steps:** Significantly expanded with error paths, `is_active` check, exchange-code storage, `state` dict (not cookie) — AUTHORISED (C3, C4, C7 determinations)
+- **API surface table:** Reformatted and added new endpoint — AUTHORISED (C4)
+- **Exchange-code store section:** New — AUTHORISED (C4)
+- **Migration:** Comment line removed — AUTHORISED (cosmetic)
+- **msal version:** `1.29.0` → `1.28.0` — AUTHORISED (stable release, plan agent chose specific version)
+- **Frontend changes:** Consolidated into bullet list with detail — AUTHORISED (C6, C7 absorbed)
+- **Signup page:** Redirect to `/login` with SSO note — AUTHORISED (C6)
+- **Error display:** `?error` on login page — AUTHORISED (C7)
 
-1. **Stream A migration filename** `004_` → `001_task_reminders.sql` — AUTHORISED (change-request §Additions: "database/001_task_reminders.sql added to Stream A scope")
-2. **Stream A models.py** — adds EntityType enum + SQLAlchemyEnum mapping — AUTHORISED (change-request §Additions: "models.py scope expanded with EntityType enum + SQLAlchemyEnum")
-3. **Stream A notifications.py** — adds limit/unread params + ownership constraint — AUTHORISED (change-request §Modifications: H2 and H7 gate updates)
-4. **Stream A Exports** — updated ORM description + REST contract — AUTHORISED (follows from #2 and #3)
-5. **Stream B requirements.txt** — removes apscheduler, adds pytest/pytest-asyncio/httpx — AUTHORISED (change-request §Modifications: "requirements.txt swapped from apscheduler to pytest...")
-6. **Stream B scope** — removes scheduler.py, adds internal.py + test_reminders.py + railway.json — AUTHORISED (change-request §Modifications: "Stream B scope: REMOVE scheduler.py and APScheduler, REPLACE with internal endpoint pattern")
-7. **Stream B Exports** — removes start/shutdown_scheduler, adds internal endpoint — AUTHORISED (follows from #6)
-8. **Stream B case enumeration missing-dependency** — updates to reflect Railway Cron model — AUTHORISED (follows from #6)
-9. **Stream C layout.tsx** — replaces Header.tsx with layout.tsx — AUTHORISED (change-request §Modifications: "Move NotificationBell mount from Header.tsx to layout.tsx")
-10. **Shared files section** — updated to reflect single-writer main.py, layout.tsx — AUTHORISED (change-request §Modifications: shared files section updated)
-11. **Integration gate** — adds limit/unread test, 403 ownership test, removes `main.py` rebase coordination — AUTHORISED (change-request §Modifications: integration gate updated)
-12. **Deferred section** — removed migration numbering ambiguity clause — AUTHORISED (change-request §Deletions: resolved ambiguity removed)
-
-### Unauthorised hunks: NONE
+**Result: no unauthorised changes detected. All hunks trace to approved determinations.**

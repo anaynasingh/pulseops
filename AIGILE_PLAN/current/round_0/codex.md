@@ -1,24 +1,19 @@
 **Findings**
 
-1. **High: Reminder notification inserts rely on an unaddressed ORM/schema mismatch.**  
-`database/schema.sql` defines `notifications.entity_type` as the PostgreSQL `entity_type` enum ([schema.sql](/home/anayna/repos/pulseops/database/schema.sql:219)), but the ORM maps `Notification.entity_type` as `String(50)` ([models.py](/home/anayna/repos/pulseops/backend/app/models/models.py:211)). The plan says the `Notification` model is "unchanged" and Stream B will insert `entity_type="task"`. That path may fail at runtime against Postgres because SQLAlchemy will bind a string/varchar value for an enum column.
+- **High: Callback route mismatch.** The plan redirects to `/auth/callback`, but `frontend/app/(auth)/callback/page.tsx` would route as `/callback`, because `(auth)` is a route group. Existing scoped pages confirm this pattern: links use `/signup` and `/login`, not `/auth/signup` or `/auth/login`. OAuth success would likely land on a missing route.
 
-2. **High: Notification read endpoints lack explicit ownership acceptance.**  
-`Notification` is user-scoped via `user_id` ([models.py](/home/anayna/repos/pulseops/backend/app/models/models.py:207)), but the plan only says endpoints are gated by `get_current_user`. It does not state that `PATCH /notifications/{id}/read` must constrain by both notification id and `current_user.id`, nor does the integration gate test cross-user access. Authentication alone is not enough for the new `backend/app/api/v1/notifications.py` surface.
+- **High: The callback contract is internally contradictory.** The plan says the backend callback returns the existing `TokenResponse` JSON shape, but also says it redirects with `access_token` and `user` query params. `TokenResponse` is a JSON response model, while the new flow expects URL parsing. This is a false-parallel trap between backend and frontend streams.
 
-3. **High: Runtime duplicate reminders are not fully bounded.**  
-The Stream B service description says to select tasks where `assigned_to IS NOT NULL AND is_completed = FALSE`, then insert reminders and stamp `last_reminded_at`. The hourly threshold appears later in the case enumeration, but not in the core query contract for `backend/app/services/reminder_service.py`. The plan also does not cover overlapping scheduler instances from multiple FastAPI workers/processes in `backend/app/core/scheduler.py`; `last_reminded_at` only prevents duplicates if the read/update is atomic enough for that runtime shape.
+- **High: Disabled users can be re-enabled by omission.** Current password login blocks inactive accounts before issuing a JWT. The OAuth sequence says upsert user, then issue JWT, with no `is_active` check. An inactive existing user matched by `ms_oid` or email would regain access.
 
-4. **Medium: The migration numbering decision is internally inconsistent.**  
-The declared in-scope file is `database/004_task_reminders.sql`, but `database/` currently has only unnumbered SQL files. The plan both says to resolve the numbering ambiguity before Stream A and also lists that confirmation under "Deferred to next Burst." That makes Stream A's first deliverable and the integration gate ambiguous before implementation starts.
+- **High: JWT-in-query is a credential exposure risk.** Current auth returns the JWT in a response body; the plan moves it into the redirect URL. That exposes it to browser history, logs, referrers, and back-button recovery. The planned `user=<json>` also has unspecified encoding for `UUID` and `datetime` fields in `UserOut`.
 
-5. **Medium: Mandatory pytest acceptance is outside the declared implementation scope.**  
-The plan requires scheduler integration tests for eligible/completed/unassigned/inactive-user cases, but no in-scope test file is declared, and `backend/requirements.txt` has no pytest dependency ([requirements.txt](/home/anayna/repos/pulseops/backend/requirements.txt:1)). As written, the acceptance requirement cannot be satisfied within the burst's own file list.
+- **Medium: Microsoft identity binding is under-specified.** The plan uses `AZURE_TENANT_ID=common`, looks up by `ms_oid`, then falls back to email. With `User.email` unique and default contributor role, the plan lacks acceptance criteria for allowed tenants/domains, personal Microsoft accounts, absent or differing email claims, case normalization, and account-linking safety.
 
-6. **Medium: Header placement can make the bell non-global.**  
-The plan says to render `<NotificationBell />` in the Header actions area. In the current Header, the actions area only renders when `actions` is passed ([Header.tsx](/home/anayna/repos/pulseops/frontend/components/layout/Header.tsx:30)). Several dashboard pages render `Header` without actions, so a literal implementation in that conditional area would omit the notification surface on those screens.
+- **Medium: `/signup` behavior is not defined after removing backend signup.** The existing signup page posts to `/auth/signup`, and login links users there. The plan scopes the signup page but does not define whether it redirects to SSO, becomes unavailable, or is removed.
 
-7. **Low: Polling an unbounded notification list has no acceptance cap.**  
-`frontend/components/layout/NotificationBell.tsx` is planned to poll `notificationsApi.list()`, while `GET /notifications` is specified as returning `List[NotificationOut]` with no ordering, limit, unread filter, or pagination. Hourly reminders accumulate by design, so the frontend and API acceptance criteria do not bound payload growth or define dropdown ordering.
+- **Medium: OAuth error paths have no frontend/backend acceptance contract.** Current login has inline error handling. The OAuth plan only specifies the success callback with `code` and `state`; it does not define behavior for Microsoft `error`, missing state cookie, token exchange failure, inactive user, or malformed user claims.
 
-[codex] Thread ID: 019e8cd6-dd10-7e51-ab4c-cb8b83d48f00
+No patches were written or proposed.
+
+Thread ID: 019ef3d5-78d1-7ae1-9dd4-330df371d912

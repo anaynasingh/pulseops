@@ -1,34 +1,38 @@
 # Round 0 Determination
 
-## H1 — ORM/schema entity_type mismatch
-**Disposition:** ABSORB-PLAN
-**Reason:** Fix the ORM. Add a Python `EntityType` Enum class and map `Notification.entity_type` as `SQLAlchemyEnum`. Keeps DB schema strict and type-safe. Stream A scope must include this ORM change.
+## C1 — HIGH: Callback route mismatch
+**Disposition: ABSORB-PLAN**
+The Next.js `(auth)` route group is a layout group only — the URL path does not include `(auth)`. So `frontend/app/(auth)/callback/page.tsx` renders at `/callback`, not `/auth/callback`. Backend `FRONTEND_URL` redirect must target `${FRONTEND_URL}/callback`, not `${FRONTEND_URL}/auth/callback`. The file path for the new page stays correct.
 
-## H2 — Notification ownership not gated
-**Disposition:** ABSORB-GATE
-**Reason:** Add `AND user_id = current_user.id` filter to all `PATCH /notifications/{id}/read` queries. Integration gate must include a cross-user 403 test.
+## C2 — HIGH: Callback contract internally contradictory
+**Disposition: ABSORB-PLAN**
+Remove the `TokenResponse` JSON shape reference from the callback endpoint. The callback endpoint is a browser redirect, not a JSON API response. Its contract is: `302 → ${FRONTEND_URL}/callback?code=<exchange_code>` (after absorbing C4). Clarify this in the plan.
 
-## H3 — Duplicate reminders on multi-worker / APScheduler risk
-**Disposition:** ABSORB-PLAN
-**Reason:** Orchestrator confirmed Railway deployment. APScheduler in-process breaks on multi-worker scale. Replace Stream B with Railway Cron Service + internal endpoint `POST /api/v1/internal/run-reminders` gated by `CRON_SECRET` env var. Remove `scheduler.py` and APScheduler dependency. `reminder_service.py` remains (called by the endpoint). `main.py` needs no lifespan hook for scheduler.
+## C3 — HIGH: Disabled users bypass is_active check
+**Disposition: ABSORB-PLAN**
+After the DB upsert and before issuing a JWT, add: `if not user.is_active: raise HTTPException(403, "Account disabled")`. Mirror the existing password-login check.
 
-## H4 — Migration numbering internally inconsistent
-**Disposition:** ABSORB-PLAN
-**Reason:** Start numbered series at `001_task_reminders.sql`. Do NOT rename existing unnumbered files (schema.sql, seed.sql, pgvector_setup.sql). Simpler; existing files are already applied.
+## C4 — HIGH: JWT in query param is a credential exposure risk
+**Disposition: ABSORB-PLAN**
+Replace the direct JWT-in-URL pattern with a short-lived server-side exchange code:
+1. After issuing the JWT, store it in an in-memory dict keyed by a UUID exchange code (TTL: 60 seconds).
+2. Redirect to `${FRONTEND_URL}/callback?code=<uuid>`.
+3. Frontend `callback/page.tsx` calls `POST /api/v1/auth/microsoft/token` with `{"code": "<uuid>"}`.
+4. Backend returns `TokenResponse` JSON (access_token + user). Removes the code from the store.
+Token never appears in any URL.
 
-## H5 — pytest not in scope/requirements
-**Disposition:** ABSORB-GATE
-**Reason:** Declare test files in Stream B scope: `backend/tests/test_reminders.py`. Add `pytest`, `pytest-asyncio`, `httpx` to `backend/requirements.txt`. Integration gate must show these tests passing.
+## C5 — MED: MS identity binding under-specified
+**Disposition: BUILD-NOTE**
+Use `AZURE_TENANT_ID=common` for now. Azure app registration restricts allowed tenants at the Azure portal level — no code guard needed. Lowercase-normalize email on upsert (`email.lower()`). Personal MS accounts are blocked at the Azure app registration level.
 
-## H6 — Bell hidden on pages without `actions` prop
-**Disposition:** ABSORB-PLAN
-**Reason:** Move `<NotificationBell />` mount to `frontend/app/(dashboard)/layout.tsx` instead of the conditional Header actions area. Stream C scope updated accordingly.
+## C6 — MED: /signup page behavior undefined
+**Disposition: ABSORB-PLAN**
+The signup page is replaced with a simple redirect to `/login`. No self-signup path exists after this burst — SSO is the only entry point.
 
-## H7 — Unbounded notification list
-**Disposition:** ABSORB-GATE
-**Reason:** `GET /notifications` must default to last 20 unread-first, support `?limit=N` and `?unread=true`. Stream A integration gate updated.
+## C7 — MED: OAuth error paths have no contract
+**Disposition: ABSORB-PLAN**
+All failure paths (MS `error` param, missing/invalid state cookie, token exchange failure, inactive user, malformed claims) redirect to `${FRONTEND_URL}/login?error=<message>`. The login page reads `?error` on mount and displays it.
 
 ## Rejected alternatives
-- APScheduler with single-worker lock: rejected — fragile on Railway, introduces app-level concurrency guards that duplicate what Railway Cron gives for free.
-- Fix DB column to VARCHAR instead of ORM to SQLAlchemyEnum: rejected — Orchestrator chose ORM fix; keeps DB-level enum validation.
-- Retroactively rename existing migration files: rejected — Orchestrator chose start-fresh-at-001 to avoid touching existing applied files.
+- Storing JWT in an HttpOnly cookie (avoids URL exposure without the exchange-code round-trip): rejected because the existing downstream API uses `Authorization: Bearer` from localStorage — changing the storage mechanism is a larger refactor than this burst scope.
+- Keeping password login as a fallback behind a feature flag: deferred, not in this burst.
