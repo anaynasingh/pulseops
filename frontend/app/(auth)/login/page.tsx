@@ -1,33 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { authApi } from "@/lib/api";
-import { useAuthStore } from "@/lib/store";
+
+const ERROR_MESSAGES: Record<string, string> = {
+  invalid_state: "Sign-in session expired. Please try again.",
+  token_exchange_failed: "Could not complete sign-in. Please try again.",
+  graph_fetch_failed: "Could not retrieve your Microsoft profile. Please try again.",
+  missing_user_claims: "Your Microsoft account is missing required information.",
+  account_disabled: "Your account has been disabled. Contact your administrator.",
+  auth_failed: "Sign-in failed. Please try again.",
+};
 
 export default function LoginPage() {
-  const router = useRouter();
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const errorKey = searchParams.get("error") ?? "";
+  const errorMessage = ERROR_MESSAGES[errorKey] ?? (errorKey ? "Sign-in failed. Please try again." : "");
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const handleMicrosoftLogin = () => {
     setLoading(true);
-    try {
-      const res = await authApi.login(email, password);
-      setAuth(res.user, res.access_token);
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(message || "Invalid credentials");
-    } finally {
-      setLoading(false);
-    }
+    authApi.microsoftLogin();
   };
 
   return (
@@ -48,53 +42,37 @@ export default function LoginPage() {
         <div className="bg-[#0f1629] border border-slate-800 rounded-2xl p-8">
           <h1 className="text-xl font-semibold text-white mb-6">Sign in to PulseOps</h1>
 
-          {error && (
+          {errorMessage && (
             <div className="mb-4 p-3 rounded-lg bg-red-900/30 border border-red-800 text-red-400 text-sm">
-              {error}
+              {errorMessage}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1.5">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="you@company.com"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1.5">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
+          <button
+            onClick={handleMicrosoftLogin}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 disabled:opacity-50 text-slate-900 font-medium py-2.5 rounded-lg transition-colors text-sm"
+          >
+            <MicrosoftIcon />
+            {loading ? "Redirecting…" : "Sign in with Microsoft"}
+          </button>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors text-sm mt-2"
-            >
-              {loading ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
-
-          <p className="mt-6 text-center text-sm text-slate-500">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 transition-colors">
-              Sign up
-            </Link>
+          <p className="mt-6 text-center text-xs text-slate-600">
+            Access is managed by your organisation&apos;s Microsoft account.
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+function MicrosoftIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+    </svg>
   );
 }
