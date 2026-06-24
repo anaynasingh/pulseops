@@ -68,8 +68,8 @@ class SSEKeepAliveMiddleware:
 
 class MCPHeaderMiddleware:
     """
-    Pure ASGI middleware — reads X-Email/X-Password headers from the ASGI scope
-    and stores them in ContextVars before every request.
+    Pure ASGI middleware — reads X-Token header from the ASGI scope
+    and stores it in a ContextVar before every request.
     Uses raw ASGI (not BaseHTTPMiddleware) so receive/send are never wrapped,
     avoiding body-buffering issues with ASGI-mounted sub-apps like FastMCP.
     """
@@ -78,15 +78,18 @@ class MCPHeaderMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] == "http":
-            from app.api.v1.mcp_server import mcp_email_var, mcp_password_var
+            from app.api.v1.mcp_server import mcp_token_var, mcp_email_var, mcp_password_var
             headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            token = headers.get(b"x-token", b"").decode() or None
             email = headers.get(b"x-email", b"").decode() or None
             password = headers.get(b"x-password", b"").decode() or None
+            t_token = mcp_token_var.set(token)
             t_email = mcp_email_var.set(email)
             t_password = mcp_password_var.set(password)
             try:
                 await self.app(scope, receive, send)
             finally:
+                mcp_token_var.reset(t_token)
                 mcp_email_var.reset(t_email)
                 mcp_password_var.reset(t_password)
         else:

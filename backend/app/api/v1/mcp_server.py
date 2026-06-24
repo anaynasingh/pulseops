@@ -3,10 +3,9 @@ Task Planner MCP Server.
 
 Connect with:
   claude mcp add task-planner --transport sse <backend>/mcp/sse \
-    --header "X-Email: you@prospect33.com" \
-    --header "X-Password: YourPassword"
+    --header "X-Token: <your-jwt-from-pulseops>"
 
-MCPHeaderMiddleware (in main.py) captures those headers into ContextVars
+MCPHeaderMiddleware (in main.py) captures the X-Token header into a ContextVar
 before every request. Tools read auth from ContextVars — no credentials
 needed as tool parameters.
 """
@@ -23,38 +22,39 @@ from app.db.session import AsyncSessionLocal
 from app.models.models import (
     Project, Task, ProjectStatus, PriorityLevel, User, TranscriptSearchLog,
 )
-from app.core.security import verify_password
+from app.core.security import decode_token
 
 mcp = FastMCP("Task Planner")
 
 # Set by MCPHeaderMiddleware in main.py before every request
 mcp_email_var: ContextVar[Optional[str]] = ContextVar("mcp_email", default=None)
 mcp_password_var: ContextVar[Optional[str]] = ContextVar("mcp_password", default=None)
+mcp_token_var: ContextVar[Optional[str]] = ContextVar("mcp_token", default=None)
 
 
 async def _authenticate() -> User | None:
-    email = mcp_email_var.get()
-    password = mcp_password_var.get()
-    if not email or not password:
-        return None
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
-        if not user or not user.password_hash:
+    token = mcp_token_var.get()
+    if token:
+        payload = decode_token(token)
+        if not payload:
             return None
-        if not verify_password(password, user.password_hash):
+        user_id = payload.get("sub")
+        if not user_id:
             return None
-        return user
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            return user if user and user.is_active else None
+    return None
 
 
 def _auth_error() -> str:
     return (
-        "❌ Not authenticated. Run in terminal:\n\n"
+        "❌ Not authenticated. Copy your token from PulseOps (Settings → MCP Token), then run:\n\n"
         "  claude mcp remove task-planner\n"
         "  claude mcp add task-planner --transport sse \\\n"
         "    https://backend-production-ff8e.up.railway.app/mcp/sse \\\n"
-        '    --header "X-Email: you@prospect33.com" \\\n'
-        '    --header "X-Password: YourPassword"\n\n'
+        '    --header "X-Token: <your-token>"\n\n'
         "Then restart Claude Code."
     )
 
