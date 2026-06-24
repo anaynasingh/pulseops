@@ -1,5 +1,6 @@
 import time
 import uuid
+import secrets
 import httpx
 import msal
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -136,6 +137,18 @@ async def microsoft_token(
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)) -> UserOut:
     return UserOut.model_validate(current_user)
+
+
+@router.get("/api-key")
+async def get_api_key(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if not current_user.api_key:
+        current_user.api_key = secrets.token_urlsafe(32)
+        await db.commit()
+        await db.refresh(current_user)
+    return {"api_key": current_user.api_key}
 
 
 @router.post("/mcp-complete", response_model=UserOut)

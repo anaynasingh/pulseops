@@ -33,6 +33,7 @@ export const authApi = {
   exchangeCode: (code: string) =>
     api.post("/auth/microsoft/token", { code }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
+  getApiKey: () => api.get("/auth/api-key").then((r) => r.data.api_key as string),
   mcpComplete: () => api.post("/auth/mcp-complete").then((r) => r.data),
   mcpReset: () => api.post("/auth/mcp-reset").then((r) => r.data),
 };

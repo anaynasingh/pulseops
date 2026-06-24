@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 
@@ -82,12 +82,23 @@ function Step2Content() {
   );
 }
 
-function Step3Content({ token }: { token: string | null }) {
+function Step3Content({ token: _jwt }: { token: string | null }) {
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const displayToken = token ? token : "<your-token>";
+
+  useEffect(() => {
+    authApi.getApiKey()
+      .then(setApiKey)
+      .catch(() => setApiKey(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const displayToken = apiKey ?? (loading ? "loading…" : "<your-token>");
   const command = `claude mcp add task-planner \\\n  --transport sse \\\n  ${BACKEND}/mcp/sse \\\n  --header "X-Token: ${displayToken}"`;
 
   const handleCopy = () => {
+    if (!apiKey) return;
     navigator.clipboard.writeText(command.replace(/\\\n  /g, " \\\n  "));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -105,9 +116,10 @@ function Step3Content({ token }: { token: string | null }) {
         </div>
         <button
           onClick={handleCopy}
-          className="absolute top-2 right-2 text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded transition-colors"
+          disabled={!apiKey}
+          className="absolute top-2 right-2 text-xs bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 px-2 py-1 rounded transition-colors"
         >
-          {copied ? "✓ Copied" : "Copy"}
+          {copied ? "✓ Copied" : loading ? "…" : "Copy"}
         </button>
       </div>
       <p className="text-sm text-slate-600">Restart Claude Code — you&apos;ll see <strong>task-planner</strong> in your MCP tools.</p>

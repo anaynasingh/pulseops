@@ -34,18 +34,24 @@ mcp_token_var: ContextVar[Optional[str]] = ContextVar("mcp_token", default=None)
 
 async def _authenticate() -> User | None:
     token = mcp_token_var.get()
-    if token:
-        payload = decode_token(token)
-        if not payload:
-            return None
+    if not token:
+        return None
+
+    # Try JWT first
+    payload = decode_token(token)
+    if payload:
         user_id = payload.get("sub")
-        if not user_id:
-            return None
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(User).where(User.id == user_id))
-            user = result.scalar_one_or_none()
-            return user if user and user.is_active else None
-    return None
+        if user_id:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(User).where(User.id == user_id))
+                user = result.scalar_one_or_none()
+                return user if user and user.is_active else None
+
+    # Try long-lived API key
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.api_key == token))
+        user = result.scalar_one_or_none()
+        return user if user and user.is_active else None
 
 
 def _auth_error() -> str:
