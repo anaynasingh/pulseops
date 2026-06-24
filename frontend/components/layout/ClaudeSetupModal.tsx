@@ -55,7 +55,7 @@ const STEPS = [
           ))}
         </ol>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-          Once connected, Claude automatically reads dev meeting transcripts and pulls action items — no copy-pasting.
+          Once connected, Claude automatically reads meeting transcripts and pulls action items — no copy-pasting.
         </div>
       </div>
     ),
