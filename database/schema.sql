@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     due_date        DATE,
     is_completed    BOOLEAN DEFAULT FALSE,
     completed_at    TIMESTAMPTZ,
+    last_reminded_at TIMESTAMPTZ,
     kanban_order    INT DEFAULT 0,
     created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ DEFAULT NOW(),

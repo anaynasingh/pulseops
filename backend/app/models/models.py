@@ -62,6 +62,16 @@ class SummaryType(str, enum.Enum):
     blocker = "blocker"
 
 
+class EntityType(str, enum.Enum):
+    project = "project"
+    task = "task"
+    comment = "comment"
+    meeting = "meeting"
+    email = "email"
+    attachment = "attachment"
+    user = "user"
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -71,6 +81,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ms_oid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.contributor)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -156,6 +167,7 @@ class Task(Base):
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reminded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     kanban_order: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -208,7 +220,7 @@ class Notification(Base):
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    entity_type: Mapped[Optional[str]] = mapped_column(SAEnum(EntityType, name="entity_type", create_type=False), nullable=True)
     entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

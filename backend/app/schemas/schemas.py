@@ -14,15 +14,8 @@ from app.models.models import (
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class SignupRequest(BaseModel):
-    email: EmailStr
-    name: str
-    password: str = Field(min_length=8)
+class MicrosoftTokenRequest(BaseModel):
+    code: str
 
 
 class TokenResponse(BaseModel):
@@ -203,6 +196,22 @@ class ActivityLogOut(BaseModel):
     user: Optional[UserOut] = None
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+class NotificationOut(BaseModel):
+    id: UUID
+    user_id: UUID
+    type: str
+    title: str
+    body: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[UUID] = None
+    is_read: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ── Project Health ────────────────────────────────────────────────────────────

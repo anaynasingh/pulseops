@@ -28,13 +28,55 @@ Interpret the output (whether from the hook or the manual run):
   in progress. Run /ag-resume to continue.`: run `/ag-resume` before
   responding to the user's first message. The plan is already approved
   and on disk; skip the full /ag-plan pipeline.
+- If it contains `AIGILE RESUME (delegated): <burst-label>`: run
+  `/ag-delegate` before responding to the user's first message. A stream
+  is currently delegated to an external builder; present status/accept/abandon
+  options to the Orchestrator.
 - If it contains `ACTION REQUIRED (post-/clear)` with `run /ag-plan`:
   run `/ag-plan` before responding to the user's first message.
 - If it contains `AIGILE RESUME:` (no `in-flight` qualifier, no post-/clear),
   it is the forward pointer from a prior non-clear session. Present it to
   the Orchestrator and confirm before acting. Do NOT auto-execute.
+- If it contains `[understand-anything] Knowledge graph is stale`, spawn the
+  background fork agent exactly as described — see the rule below.
 - If it contains override or health warnings, mention them once and continue.
 - If empty: repo is healthy and idle. Proceed normally.
+
+### Understand-anything auto-update rule
+
+When any session-start system-reminder contains `[understand-anything] Knowledge graph
+is stale`, spawn a background fork agent as your very first action (before responding
+to the user). The hook will include an `Agent({...})` call — execute it exactly as
+shown. Do not execute the update inline; it spawns multiple sub-agents and blocks the
+session. Do not ask the user for confirmation.
+
+If the hook message is the old form ("You MUST read the file … and execute its
+instructions"), override it: spawn a background fork with the prompt "Read <path> and
+execute all its instructions to incrementally update the knowledge graph." Find the
+path with: `find ~/.claude/plugins/cache/understand-anything -name 'auto-update-prompt.md' | sort -rV | head -1`
+
+This rule also applies after git commits — the PostToolUse hook fires with the same
+pattern.
+
+### Pre-flight init check
+
+Before executing any ag- skill (ag-plan, ag-probe, ag-ship, ag-resume, ag-charter,
+ag-delegate, ag-brief, ag-handoff, ag-stream), run the pre-flight gate:
+
+```bash
+LIB_DIR="$HOME/.claude/aigile-canonical/lib"
+. "$LIB_DIR/ag-preflight.sh"
+ag_preflight "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+```
+
+Interpret the result:
+- `PREFLIGHT_OK` — proceed normally.
+- `PREFLIGHT_REMEDIATED: …` — `ag-init --auto` ran automatically; proceed.
+- `PREFLIGHT_FAIL: …` (exit 26 = branch gate; exit 25 = mid-burst marker) — **HARD STOP.**
+  Surface the message verbatim to the Orchestrator and wait for resolution.
+
+ag-ship deletes `.aigile/last-init` at Step 12 after shipping, so every new burst cycle
+starts with a forced ag-init. This ensures canonical skills and settings are always current.
 
 ### Plan first
 
@@ -171,8 +213,10 @@ commits, CHARTER). Conversation context is disposable after a burst ships.
   the current round (round is fully resolved)
 
 Hard-blocked phases — do NOT `/clear` mid-burst when Phase is
-`Probing` or `Steering`. These phases may have in-flight Codex threads
-or pending steer questions that cannot be resumed from disk alone.
+`Probing`, `Steering`, or `Delegated`. These phases may have in-flight Codex threads,
+pending steer questions, or active delegation artefacts that cannot be resumed from
+disk alone. If Phase is `Delegated`, run `/ag-delegate` to accept or abandon the
+delegation before clearing.
 
 If any hard condition fails, do not suggest `/clear`. Surface the
 specific failing condition (e.g. "STATUS Phase is Building, not Idle").
@@ -194,7 +238,7 @@ Do NOT `/clear` when:
 
 - Uncommitted working tree
 - Steer question asked but not answered
-- STATUS Phase is `Probing` or `Steering`
+- STATUS Phase is `Probing`, `Steering`, or `Delegated`
 - STATUS Phase is not Idle or Active Burst is not None (unless mid-burst
   conditions above are met)
 

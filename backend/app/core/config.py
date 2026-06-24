@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    CRON_SECRET: Optional[str] = None
+    # Microsoft / Azure AD OAuth
+    AZURE_CLIENT_ID: str = ""
+    AZURE_CLIENT_SECRET: str = ""
+    AZURE_TENANT_ID: str = "common"
+    AZURE_REDIRECT_URI: str = "http://localhost:8001/api/v1/auth/microsoft/callback"
+    FRONTEND_URL: str = "http://localhost:3000"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

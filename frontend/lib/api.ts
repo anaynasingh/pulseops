@@ -23,10 +23,11 @@ api.interceptors.request.use((config) => {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  login: (email: string, password: string) =>
-    api.post("/auth/login", { email, password }).then((r) => r.data),
-  signup: (email: string, name: string, password: string) =>
-    api.post("/auth/signup", { email, name, password }).then((r) => r.data),
+  microsoftLogin: () => {
+    window.location.href = `${API_URL}/api/v1/auth/microsoft/login`;
+  },
+  exchangeCode: (code: string) =>
+    api.post("/auth/microsoft/token", { code }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
 };
 
@@ -106,4 +107,14 @@ export const analyticsApi = {
   health: (project_id: string) =>
     api.get(`/analytics/health/${project_id}`).then((r) => r.data),
   gantt: () => api.get("/analytics/gantt").then((r) => r.data),
+};
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export const notificationsApi = {
+  list: (params?: { limit?: number; unread?: boolean }) =>
+    api.get("/notifications", { params }).then((r) => r.data),
+  markRead: (id: string) =>
+    api.patch(`/notifications/${id}/read`).then((r) => r.data),
+  markAllRead: () => api.patch("/notifications/read-all").then((r) => r.data),
 };

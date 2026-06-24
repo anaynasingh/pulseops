@@ -4,7 +4,7 @@ PulseOps — FastAPI Application Entry Point
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics
+from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics, notifications, internal
 
 app = FastAPI(
     title="PulseOps API",
@@ -32,6 +32,8 @@ app.include_router(kanban.router, prefix=PREFIX)
 app.include_router(ai.router, prefix=PREFIX)
 app.include_router(search.router, prefix=PREFIX)
 app.include_router(analytics.router, prefix=PREFIX)
+app.include_router(notifications.router, prefix=PREFIX)
+app.include_router(internal.router, prefix=PREFIX)
 
 
 @app.get("/health")

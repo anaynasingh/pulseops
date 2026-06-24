@@ -42,22 +42,19 @@ last_promoted: 2026-06-03
 
 ## Discovered Capabilities
 
-<!-- Promoted from HISTORY learnings via probe gate. -->
-<!-- Format: - [date] insight - burst: <name> -->
+> Moved to AIGILE_PLAN/CAPABILITIES.md. CHARTER contains Vision, Hard Specs, Constraints, Objectives, and Success Criteria only.
 
 ## Challenged Decisions
 
-<!-- Format: - [date] decision - challenge: <summary> -->
-<!--           ruling: <accepted/rejected/modified> - <rationale> -->
+> Moved to AIGILE_DECISIONS.md. CHARTER contains Vision, Hard Specs, Constraints, Objectives, and Success Criteria only.
 
 ## Deferred
 
-<!-- Format: - [date] item - trigger: <condition> -->
+> Moved to AIGILE_PLAN/DEFERRED.md. CHARTER contains Vision, Hard Specs, Constraints, Objectives, and Success Criteria only.
 
 ## Under Consideration
 
-- [2026-06-03] Deployment target (Railway vs Vercel+Railway vs self-hosted) - needs: decision on hosting budget and whether prod deploy is in scope
-- [2026-06-03] M365 MCP server integration depth — server exists but unclear which flows use it - needs: review of mcp-servers/m365/server.py scope
+> Moved to AIGILE_PLAN/CONSIDERATIONS.md. CHARTER contains Vision, Hard Specs, Constraints, Objectives, and Success Criteria only.
 
 ## Success Criteria
 

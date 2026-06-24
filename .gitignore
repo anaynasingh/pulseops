@@ -16,3 +16,17 @@ backend/.env
 .DS_Store
 *.log
 run_schema.py
+# Claude Code local overrides
+.claude/settings.local.json
+.claude/.aigile-notice
+.claude/.aigile-backup-run-*
+CLAUDE.md.aigile-backup
+AIGILE_CORRECTIONS.md.aigile-backup
+.aigile/*
+!.aigile/manifests
+!.aigile/manifests/**
+.understand-anything/intermediate/
+.understand-anything/diff-overlay.json
+.understand-anything/tmp/
+!.aigile/delegation
+!.aigile/delegation/**

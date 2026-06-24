@@ -1,0 +1,18 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+  },
+  "cron": {
+    "description": "Hourly task reminder job — configure as a separate Railway Cron service",
+    "schedule": "0 * * * *",
+    "command": "curl -s -X POST $BACKEND_URL/api/v1/internal/run-reminders -H \"X-Cron-Secret: $CRON_SECRET\"",
+    "envVars": {
+      "BACKEND_URL": "Internal URL of the PulseOps web service (e.g. https://pulseops.up.railway.app)",
+      "CRON_SECRET": "Must match CRON_SECRET on the web service"
+    }
+  }
+}
