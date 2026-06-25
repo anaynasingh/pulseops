@@ -4,12 +4,18 @@ import { useQuery } from "@tanstack/react-query";
 import { analyticsApi } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { PRIORITY_CONFIG } from "@/lib/types";
-import type { DashboardStats } from "@/lib/types";
+import type { DashboardStats, TaskBalanceResponse } from "@/lib/types";
+import { TaskBalanceChart } from "@/components/dashboard/TaskBalanceChart";
 
 export default function AnalyticsPage() {
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["dashboard"],
     queryFn: () => analyticsApi.dashboard(),
+  });
+
+  const { data: taskBalance, isLoading: balanceLoading } = useQuery<TaskBalanceResponse>({
+    queryKey: ["task-balance"],
+    queryFn: () => analyticsApi.taskBalance(),
   });
 
   return (
@@ -110,6 +116,23 @@ export default function AnalyticsPage() {
               );
             })()}
           </div>
+        </div>
+
+        {/* Task Balance Chart */}
+        <div className="bg-[#0f1629] border border-slate-800 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-white mb-1">Task Balance</h3>
+          <p className="text-xs text-slate-500 mb-4">Overdue vs upcoming tasks per person — High / Medium / Low priority</p>
+          {balanceLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-7 bg-slate-800 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : !taskBalance || taskBalance.people.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-6">No task data</p>
+          ) : (
+            <TaskBalanceChart data={taskBalance} />
+          )}
         </div>
 
         {/* AI Insights summary */}

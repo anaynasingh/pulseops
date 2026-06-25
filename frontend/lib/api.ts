@@ -127,6 +127,7 @@ export const analyticsApi = {
   health: (project_id: string) =>
     api.get(`/analytics/health/${project_id}`).then((r) => r.data),
   gantt: () => api.get("/analytics/gantt").then((r) => r.data),
+  taskBalance: () => api.get("/analytics/task-balance").then((r) => r.data),
 };
 
 // ── Notifications ─────────────────────────────────────────────────────────────

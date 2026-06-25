@@ -509,6 +509,23 @@ class DashboardStats(BaseModel):
     priority_distribution: dict = {}
 
 
+class TaskPriorityBreakdown(BaseModel):
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+
+
+class PersonTaskBalance(BaseModel):
+    name: str
+    overdue: TaskPriorityBreakdown
+    upcoming: TaskPriorityBreakdown
+
+
+class TaskBalanceResponse(BaseModel):
+    people: List[PersonTaskBalance]
+    max_count: int
+
+
 # Allow forward references
 ProjectOut.model_rebuild()
 CommentOut.model_rebuild()

@@ -208,6 +208,23 @@ export const PRIORITY_CONFIG_LIGHT: Record<PriorityLevel, { label: string; color
   urgent: { label: "Urgent", color: "text-white", bg: "bg-red-600" },
 };
 
+export interface TaskPriorityBreakdown {
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface PersonTaskBalance {
+  name: string;
+  overdue: TaskPriorityBreakdown;
+  upcoming: TaskPriorityBreakdown;
+}
+
+export interface TaskBalanceResponse {
+  people: PersonTaskBalance[];
+  max_count: number;
+}
+
 export const HEALTH_CONFIG: Record<HealthStatus, { label: string; color: string; dot: string }> = {
   healthy:  { label: "Healthy",  color: "text-green-400",  dot: "bg-green-400" },
   at_risk:  { label: "At Risk",  color: "text-amber-400",  dot: "bg-amber-400" },

@@ -10,7 +10,7 @@ from app.models.models import (
     Project, Task, ActivityLog, AIInsight, User,
     ProjectHealth, ProjectStatus, PriorityLevel
 )
-from app.schemas.schemas import DashboardStats, ProjectOut, ActivityLogOut, AIInsightOut, ProjectHealthOut
+from app.schemas.schemas import DashboardStats, ProjectOut, ActivityLogOut, AIInsightOut, ProjectHealthOut, TaskBalanceResponse, TaskPriorityBreakdown, PersonTaskBalance
 from app.core.deps import get_current_user
 
 _PRIORITY_ORDER_SQL = text(
@@ -299,6 +299,73 @@ async def get_gantt_data(
         max_date = (today + timedelta(days=30)).isoformat()
 
     return {"items": items, "min_date": min_date, "max_date": max_date}
+
+
+@router.get("/task-balance", response_model=TaskBalanceResponse)
+async def get_task_balance(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Overdue vs upcoming tasks per person, broken down by High/Medium/Low priority."""
+    from sqlalchemy import or_
+
+    today = datetime.utcnow().date()
+
+    def _bucket(priority: PriorityLevel) -> str:
+        if priority in (PriorityLevel.urgent, PriorityLevel.high):
+            return "high"
+        if priority == PriorityLevel.medium:
+            return "medium"
+        return "low"
+
+    overdue_res = await db.execute(
+        select(User.name, Task.priority, func.count(Task.id).label("cnt"))
+        .join(User, User.id == Task.assigned_to)
+        .where(Task.is_completed == False, Task.due_date < today)
+        .group_by(User.name, Task.priority)
+    )
+
+    upcoming_res = await db.execute(
+        select(User.name, Task.priority, func.count(Task.id).label("cnt"))
+        .join(User, User.id == Task.assigned_to)
+        .where(
+            Task.is_completed == False,
+            or_(Task.due_date >= today, Task.due_date.is_(None)),
+        )
+        .group_by(User.name, Task.priority)
+    )
+
+    people: dict[str, dict] = {}
+
+    for row in overdue_res:
+        if row.name not in people:
+            people[row.name] = {"name": row.name, "overdue": {"high": 0, "medium": 0, "low": 0}, "upcoming": {"high": 0, "medium": 0, "low": 0}}
+        people[row.name]["overdue"][_bucket(row.priority)] += row.cnt
+
+    for row in upcoming_res:
+        if row.name not in people:
+            people[row.name] = {"name": row.name, "overdue": {"high": 0, "medium": 0, "low": 0}, "upcoming": {"high": 0, "medium": 0, "low": 0}}
+        people[row.name]["upcoming"][_bucket(row.priority)] += row.cnt
+
+    result = list(people.values())
+
+    max_count = max(
+        (sum(p["overdue"].values()) for p in result),
+        (sum(p["upcoming"].values()) for p in result),
+        default=1,
+    ) if result else 1
+
+    return TaskBalanceResponse(
+        people=[
+            PersonTaskBalance(
+                name=p["name"],
+                overdue=TaskPriorityBreakdown(**p["overdue"]),
+                upcoming=TaskPriorityBreakdown(**p["upcoming"]),
+            )
+            for p in result
+        ],
+        max_count=max_count,
+    )
 
 
 @router.get("/health/{project_id}", response_model=ProjectHealthOut)
