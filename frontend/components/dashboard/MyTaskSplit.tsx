@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { tasksApi } from "@/lib/api";
 import { PRIORITY_CONFIG, PRIORITY_CONFIG_LIGHT } from "@/lib/types";
@@ -100,17 +101,28 @@ function Column({
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {tasks.map((t) => (
-            <TaskCard
-              key={t.id}
-              task={t}
-              overdue={overdue}
-              isLight={isLight}
-              done={doneIds.has(t.id)}
-              onComplete={onComplete}
-            />
-          ))}
+        <div>
+          <AnimatePresence initial={false}>
+            {visible.map((t) => (
+              <motion.div
+                key={t.id}
+                layout
+                initial={false}
+                exit={{ opacity: 0, height: 0, marginBottom: 0, scale: 0.97 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                style={{ overflow: "hidden" }}
+                className="mb-2.5 last:mb-0"
+              >
+                <TaskCard
+                  task={t}
+                  overdue={overdue}
+                  isLight={isLight}
+                  done={doneIds.has(t.id)}
+                  onComplete={onComplete}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </div>
