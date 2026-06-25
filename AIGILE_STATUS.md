@@ -8,7 +8,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 **Active burst:** None
 **Burst base:** None
 **Plan reference:** None
-**Next action:** Burst complete — day-view-timeblock shipped to Railway prod (/day page, GET /tasks/day, time-block reminders). Ready for next burst.
+**Next action:** Burst complete — dashboard-complete-gap shipped to Railway prod (PR #2, b67f6dd); dev back-synced to the shipped version. Frontend Railway redeploy still pending (manual). Ready for next burst.
 **Last updated:** 2026-06-25
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -65,3 +65,5 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 <!-- Append completed Bursts. Keep last 5 entries. Full archive in AIGILE_HISTORY.md. -->
 <!-- Long-term burst sequence lives in AIGILE_PLAN/long-term/sequence.md. -->
+
+- [2026-06-25] dashboard-complete-gap — task-completion layout gap fix (AnimatePresence reflow + 300ms check beat). PASS. Shipped prod b67f6dd (PR #2).
