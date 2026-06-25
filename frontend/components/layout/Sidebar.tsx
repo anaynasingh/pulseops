@@ -135,16 +135,19 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
           </div>
           <button
             onClick={() => setReminderEnabled(!reminderEnabled)}
+            role="switch"
+            aria-checked={reminderEnabled}
+            aria-label="Focus reminders"
             className={cn(
-              "relative w-8 h-4 rounded-full transition-colors shrink-0",
+              "relative w-8 h-4 rounded-full transition-colors shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#080f20]",
               reminderEnabled ? "bg-indigo-600" : "bg-slate-700"
             )}
             title={reminderEnabled ? "Disable reminders" : "Enable hourly focus reminders"}
           >
             <span
               className={cn(
-                "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform",
-                reminderEnabled ? "translate-x-4" : "translate-x-0.5"
+                "absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform",
+                reminderEnabled ? "translate-x-4" : "translate-x-0"
               )}
             />
           </button>
@@ -166,7 +169,7 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
               className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors whitespace-nowrap"
               title="Preview reminder now"
             >
-              Test
+              Preview
             </button>
           </div>
         )}
