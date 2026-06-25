@@ -8,7 +8,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 **Active burst:** None
 **Burst base:** None
 **Plan reference:** None
-**Next action:** Burst complete — reminder-modal shipped to Railway prod (PR #4, 7180bed); dev back-synced. Manual frontend Railway redeploy still pending — picks up THREE merged fixes: dashboard-complete-gap (b67f6dd), focus-reminder-toggle (f617541), reminder-modal (7180bed). Ready for next burst.
+**Next action:** Burst complete — remove-my-tasks shipped to Railway prod (PR #5, db4bacd); dev back-synced; auto-deployed. All recent fixes live (b67f6dd, f617541, 7180bed, db4bacd). Ready for next burst.
 **Last updated:** 2026-06-25
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -69,3 +69,4 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - [2026-06-25] dashboard-complete-gap — task-completion layout gap fix (AnimatePresence reflow + 300ms check beat). PASS. Shipped prod b67f6dd (PR #2).
 - [2026-06-25] focus-reminder-toggle — sidebar toggle knob containment + "Test"→"Preview" + a11y. PASS. Shipped prod f617541 (PR #3).
 - [2026-06-25] reminder-modal — "Focus Check" title + prefetch/skeleton (no empty flash). PASS. Shipped prod 7180bed (PR #4).
+- [2026-06-25] remove-my-tasks — dropped redundant dashboard My Tasks list + deleted component. PASS. Shipped prod db4bacd (PR #5).

@@ -38,3 +38,11 @@ This file keeps everything.
 **Steer:** Shipped to prod (P33-AI master) via PR #4, squash-merged as 7180bed; dev back-synced after merge.
 **Gemini:** 1 round, 1 MEDIUM finding REJECTED with reasoning — it assumed general task mutations invalidate a `["tasks"]` prefix, but this repo invalidates `["my-dashboard"]`/`["projects"]`/etc. and nothing invalidates `["tasks"]`, so the suggested hierarchical key gained nothing. Example of adversarially verifying a reviewer finding against the actual codebase rather than applying blindly.
 **Learnings:** Reviewer best-practice suggestions must be checked against the repo's actual conventions — a generically-correct cache-key recommendation was inert here because the invalidation scheme is dashboard-keyed, not tasks-keyed.
+
+### [2026-06-25] Burst: remove-my-tasks
+
+**Built:** Removed the redundant "My Tasks" list from the dashboard (the Overdue/Upcoming `MyTaskSplit` above already covers a user's tasks) and deleted the now-unused `MyTasksList.tsx` (272 lines, zero references). Recent activity now fills the left column.
+**Verify:** PASS — `tsc --noEmit` clean, `next build` clean. NOT browser-verified.
+**Steer:** Shipped to prod (P33-AI master) via PR #5, squash-merged as db4bacd; dev back-synced after merge.
+**Gemini:** 1 round, 1 MEDIUM — dead `space-y` spacing class on the now-single-child column; applied.
+**Learnings:** Confirmed Railway frontend auto-deploys on merge to master (user observed all prior fixes redeployed automatically) — the long-standing "manual frontend redeploy" assumption is retired; memory updated.
