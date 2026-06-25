@@ -253,7 +253,24 @@ export default function ProjectDetailPage() {
   const updateTask = useMutation({
     mutationFn: ({ taskId, data }: { taskId: string; data: Record<string, unknown> }) =>
       tasksApi.update(taskId, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["project", id] }),
+    // Optimistic update — patch the cached task instantly so the UI never waits on the server
+    onMutate: async ({ taskId, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["project", id] });
+      const previous = queryClient.getQueryData<Project>(["project", id]);
+      if (previous) {
+        queryClient.setQueryData<Project>(["project", id], {
+          ...previous,
+          tasks: (previous.tasks ?? []).map((t) =>
+            t.id === taskId ? { ...t, ...data } : t
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["project", id], context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["project", id] }),
   });
 
   const deleteTask = useMutation({
