@@ -10,8 +10,8 @@ import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AIInsightsPanel } from "@/components/dashboard/AIInsightsPanel";
 import { HighPriorityList } from "@/components/dashboard/HighPriorityList";
 import { MyTasksList } from "@/components/dashboard/MyTasksList";
-import { TaskBalanceChart } from "@/components/dashboard/TaskBalanceChart";
-import type { DashboardStats, TaskBalanceResponse } from "@/lib/types";
+import { MyTaskSplit } from "@/components/dashboard/MyTaskSplit";
+import type { DashboardStats } from "@/lib/types";
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
@@ -32,13 +32,6 @@ export default function DashboardPage() {
     queryKey: ["dashboard"],
     queryFn: () => analyticsApi.dashboard(),
     refetchInterval: 30_000,
-    enabled: view === "team",
-  });
-
-  // Task balance — team-wide overdue vs upcoming per person
-  const { data: taskBalance, isLoading: balanceLoading } = useQuery<TaskBalanceResponse>({
-    queryKey: ["task-balance"],
-    queryFn: () => analyticsApi.taskBalance(),
     enabled: view === "team",
   });
 
@@ -129,8 +122,11 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {/* Overdue (left) vs Upcoming (right) split */}
+            <MyTaskSplit tasks={myData?.my_tasks ?? []} loading={myLoading} />
+
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-5">
-              {/* My tasks — 2 cols */}
+              {/* Full interactive task list — 2 cols */}
               <div className="xl:col-span-2 space-y-4 md:space-y-5">
                 <MyTasksList tasks={myData?.my_tasks ?? []} loading={myLoading} />
                 <ActivityFeed activities={myData?.my_activity ?? []} loading={myLoading} title="My Recent Activity" />
@@ -153,23 +149,6 @@ export default function DashboardPage() {
         {view === "team" && (
           <>
             <StatsGrid stats={teamStats} loading={teamLoading} />
-
-            {/* Task Balance — overdue (left) vs upcoming (right) per person */}
-            <div className="bg-[#0f1629] border border-slate-800 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-white mb-1">Task Balance</h3>
-              <p className="text-xs text-slate-500 mb-4">Overdue vs upcoming tasks per person — High / Medium / Low priority</p>
-              {balanceLoading ? (
-                <div className="space-y-3">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-7 bg-slate-800 rounded animate-pulse" />
-                  ))}
-                </div>
-              ) : !taskBalance || taskBalance.people.length === 0 ? (
-                <p className="text-slate-500 text-sm text-center py-6">No task data</p>
-              ) : (
-                <TaskBalanceChart data={taskBalance} />
-              )}
-            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               <div className="lg:col-span-2 space-y-5">
