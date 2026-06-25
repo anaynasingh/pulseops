@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Plan reference:** None
-**Next action:** Burst complete — remove-my-tasks shipped to Railway prod (PR #5, db4bacd); dev back-synced; auto-deployed. All recent fixes live (b67f6dd, f617541, 7180bed, db4bacd). Ready for next burst.
+**Phase:** Building
+**Active burst:** assistant-task-prompts
+**Burst base:** ea32bf424e5943474f68866fcf23ccaea4a27a8a
+**Plan reference:** AIGILE_PLAN/current/
+**Next action:** Build: Stream A (frontend quick-prompts in AIAssistantPanel.tsx) + Stream B (backend per-user task context in ai.py /chat) in parallel.
 **Last updated:** 2026-06-25
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -34,7 +34,13 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-<!-- No active streams. -->
+**Stream frontend-quick-prompts builders:** claude
+**Stream frontend-quick-prompts handoff head:** None
+**Stream frontend-quick-prompts status:** IN PROGRESS
+
+**Stream backend-task-context builders:** claude
+**Stream backend-task-context handoff head:** None
+**Stream backend-task-context status:** IN PROGRESS
 
 ## Gemini Reviews
 
