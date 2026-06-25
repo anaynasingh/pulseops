@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-06-03T07:18:42Z",
+  "hostname": "anaynasingh",
+  "username": "anayna",
+  "os": "linux",
+  "os_version": "24.04",
+  "arch": "x86_64",
+  "chip": "13th Gen Intel(R) Core(TM) i3-1315U",
+  "host_cores": 8,
+  "host_memory_gb": 3.8,
+  "wsl": true,
+  "wsl_distro": "Ubuntu 24.04.1 LTS",
+  "container": false,
+  "machine_id_hash": null,
+  "container_runtime": "native",
+  "container_runtime_version": null,
+  "docker_vm_memory_gb": 0.0,
+  "docker_vm_cores": null,
+  "docker_probe_status": "ok"
+}

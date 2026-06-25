@@ -1,0 +1,22 @@
+# model-roles.yaml schema
+# This file documents the structure written to <repo>/.aigile/model-roles.yaml
+# by ag-init. The .aigile/ directory is gitignored (machine-local state).
+#
+# The model-roles.yaml file records which AI models are filling which roles
+# in the current engagement. Update manually if roles change mid-engagement.
+#
+# roles:
+#   Builder: <model-id or alias>   # primary code producer for this engagement
+#   Reviewer: <model-id or alias>  # adversarial reviewer (burst-plan + probe)
+#   Ship-gate: <model-id or alias> # final gate model before main merge
+#
+# Aliases: claude, codex, gemini (resolved by each skill to the installed version)
+# Full model IDs are also accepted (e.g. claude-sonnet-4-6, gpt-4o).
+#
+# Engagement mode lives in AIGILE_CHARTER.md frontmatter (mode: field), not here.
+# ag-status reads mode from CHARTER and surfaces it in the health report.
+
+roles:
+  Builder: claude # primary code producer
+  Reviewer: codex # adversarial reviewer
+  Ship-gate: gemini # final gate before main merge
