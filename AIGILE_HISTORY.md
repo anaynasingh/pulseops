@@ -30,3 +30,11 @@ This file keeps everything.
 **Steer:** Shipped to prod (P33-AI master) via PR #3, squash-merged as f617541. Same out-of-cycle hotfix flow (branch off prod/master); dev back-synced immediately after merge this time.
 **Gemini:** 2 rounds, all resolved. R1 (MEDIUM): overflow-hidden redundant + would clip focus rings; missing `role="switch"`/`aria-checked`; missing focus-visible ring. R2 (MEDIUM): `role="switch"` needs a static `aria-label` or screen readers fall back to the dynamic title. Re-review loop stopped after R2 (diminishing-returns a11y polish on a 1-file change).
 **Learnings:** Back-syncing dev right after the prod merge (rather than later) kept the two branches' file content aligned — applying the PENDING correction from the prior burst.
+
+### [2026-06-25] Burst: reminder-modal
+
+**Built:** Two fixes to the Focus Check reminder modal. (1) Renamed "Hourly Focus Check" to "Focus Check" since the interval is configurable (15/30/60/120 min). (2) Killed the ~5s empty-then-populate flash: the task query was gated on `visible`, so the modal opened showing "No incomplete tasks found" until the fetch resolved. Now fetches on mount (modal is mounted once in the dashboard layout) with a 5-min staleTime, and shows a loading skeleton instead of the false empty state.
+**Verify:** PASS — `tsc --noEmit` clean, `next build` clean. NOT browser-verified.
+**Steer:** Shipped to prod (P33-AI master) via PR #4, squash-merged as 7180bed; dev back-synced after merge.
+**Gemini:** 1 round, 1 MEDIUM finding REJECTED with reasoning — it assumed general task mutations invalidate a `["tasks"]` prefix, but this repo invalidates `["my-dashboard"]`/`["projects"]`/etc. and nothing invalidates `["tasks"]`, so the suggested hierarchical key gained nothing. Example of adversarially verifying a reviewer finding against the actual codebase rather than applying blindly.
+**Learnings:** Reviewer best-practice suggestions must be checked against the repo's actual conventions — a generically-correct cache-key recommendation was inert here because the invalidation scheme is dashboard-keyed, not tasks-keyed.

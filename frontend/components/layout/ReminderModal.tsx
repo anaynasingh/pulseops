@@ -26,11 +26,13 @@ export function ReminderModal() {
   const { visible, dismiss, snooze } = useReminderStore();
   const { user } = useAuthStore();
 
-  const { data: tasks = [] } = useQuery<Task[]>({
+  const { data: tasks = [], isLoading } = useQuery<Task[]>({
     queryKey: ["tasks-reminder", user?.id],
     queryFn: () => tasksApi.list({ assigned_to: user?.id }),
-    enabled: visible && !!user?.id,
-    staleTime: 30_000,
+    // Fetch on mount (not gated on `visible`) so the list is already cached
+    // when the reminder fires — avoids the empty-then-populate flash.
+    enabled: !!user?.id,
+    staleTime: 5 * 60_000,
   });
 
   if (!visible) return null;
@@ -45,14 +47,23 @@ export function ReminderModal() {
         <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
           <span className="text-indigo-400 text-lg ai-pulse">⏱</span>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-white">Hourly Focus Check</p>
+            <p className="text-sm font-semibold text-white">Focus Check</p>
             <p className="text-[11px] text-slate-500">{now} — what are you working on?</p>
           </div>
         </div>
 
         {/* Task list */}
         <div className="px-5 py-4">
-          {focus.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-2.5">
+              <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-3">
+                Top priorities right now
+              </p>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-9 rounded-lg bg-slate-800/60 animate-pulse" />
+              ))}
+            </div>
+          ) : focus.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-2">
               No incomplete tasks found. Nice work!
             </p>
