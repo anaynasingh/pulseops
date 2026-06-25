@@ -71,16 +71,17 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* High priority projects breakdown */}
+          {/* Priority distribution — from all active projects */}
           <div className="bg-[#0f1629] border border-slate-800 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Priority Distribution</h3>
             {(() => {
-              const all = [
-                ...(stats?.high_priority_projects ?? []),
-                ...(stats?.stale_projects ?? []),
-              ];
-              const counts: Record<string, number> = { low: 0, medium: 0, high: 0, urgent: 0 };
-              all.forEach((p) => { counts[p.priority] = (counts[p.priority] ?? 0) + 1; });
+              const dist = stats?.priority_distribution ?? {};
+              const counts: Record<string, number> = {
+                urgent: dist["urgent"] ?? 0,
+                high:   dist["high"]   ?? 0,
+                medium: dist["medium"] ?? 0,
+                low:    dist["low"]    ?? 0,
+              };
               const total = Object.values(counts).reduce((a, b) => a + b, 0);
               return (
                 <div className="space-y-3">

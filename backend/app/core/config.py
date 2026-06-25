@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
-    CRON_SECRET: Optional[str] = None
     # Microsoft / Azure AD OAuth
     AZURE_CLIENT_ID: str = ""
     AZURE_CLIENT_SECRET: str = ""

@@ -4,7 +4,6 @@ Uses OpenRouter (OpenAI-compatible) for all chat completions.
 Structured outputs via JSON mode + Pydantic parsing.
 """
 import json
-import re
 import ssl
 import httpx
 from typing import Any, Type
@@ -72,9 +71,11 @@ async def structured_completion(
     raw = response.choices[0].message.content.strip()
 
     # Strip accidental markdown code fences if the model adds them
-    raw = re.sub(r'^```(?:json)?\s*', '', raw)
-    raw = re.sub(r'\s*```$', '', raw)
-    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
 
     data = json.loads(raw)
     return response_model.model_validate(data)
@@ -84,15 +85,17 @@ async def chat_completion(
     system_prompt: str,
     user_prompt: str,
     temperature: float = 0.5,
+    history: list[dict] | None = None,
 ) -> str:
     """Plain text completion — for summaries, reports, free-form answers."""
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user_prompt})
     response = await client.chat.completions.create(
         model=MODEL,
         temperature=temperature,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        messages=messages,
     )
     return response.choices[0].message.content.strip()
 

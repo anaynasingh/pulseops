@@ -9,10 +9,14 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
+  closestCenter,
+  type CollisionDetection,
 } from "@dnd-kit/core";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, kanbanApi } from "@/lib/api";
+// Note: KanbanBoard uses the slim /projects/kanban endpoint (no nested task lists)
 import { useBoardStore } from "@/lib/store";
 import { KANBAN_COLUMNS } from "@/lib/types";
 import { KanbanColumn } from "./KanbanColumn";
@@ -25,6 +29,22 @@ interface KanbanBoardProps {
   filterOwner?: string;
 }
 
+// Custom collision: pointer position wins over corner proximity.
+// Columns always take priority over cards so you can't accidentally
+// drop in the wrong column.
+const kanbanCollision: CollisionDetection = (args) => {
+  // 1. Check if pointer is directly over a column first
+  const columnIds = new Set<string>(KANBAN_COLUMNS.map((c) => c.id));
+  const columnContainers = args.droppableContainers.filter((c) =>
+    columnIds.has(String(c.id))
+  );
+  const overColumn = pointerWithin({ ...args, droppableContainers: columnContainers });
+  if (overColumn.length > 0) return overColumn;
+
+  // 2. Fall back to rect intersection for empty columns
+  return rectIntersection(args);
+};
+
 export function KanbanBoard({ searchQuery, filterPriority, filterOwner }: KanbanBoardProps) {
   const queryClient = useQueryClient();
   const { projects, setProjects, moveProject } = useBoardStore();
@@ -34,16 +54,29 @@ export function KanbanBoard({ searchQuery, filterPriority, filterOwner }: Kanban
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // Fetch projects
+  // Fetch projects via slim kanban endpoint, fallback to full endpoint on error
   const { data: fetchedProjects } = useQuery<Project[]>({
-    queryKey: ["projects", searchQuery, filterPriority, filterOwner],
-    queryFn: () =>
-      projectsApi.list({
-        q: searchQuery || undefined,
-        priority: filterPriority || undefined,
-        owner_id: filterOwner || undefined,
-        limit: 200,
-      }),
+    queryKey: ["projects-kanban", searchQuery, filterPriority, filterOwner],
+    queryFn: async () => {
+      try {
+        return await projectsApi.listKanban({
+          q: searchQuery || undefined,
+          priority: filterPriority || undefined,
+          owner_id: filterOwner || undefined,
+          limit: 200,
+        });
+      } catch {
+        // Fallback to full endpoint if slim endpoint fails
+        return projectsApi.list({
+          q: searchQuery || undefined,
+          priority: filterPriority || undefined,
+          owner_id: filterOwner || undefined,
+          limit: 200,
+        });
+      }
+    },
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
   });
 
   // Sync fetched projects into the board store
@@ -96,7 +129,7 @@ export function KanbanBoard({ searchQuery, filterPriority, filterOwner }: Kanban
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={kanbanCollision}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >

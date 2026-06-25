@@ -1,5 +1,6 @@
 import time
 import uuid
+import secrets
 import httpx
 import msal
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,10 +16,7 @@ from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Short-lived stores — module-level, single-process only.
-# key = state uuid str, value = expiry timestamp
 _state_store: dict[str, float] = {}
-# key = exchange code uuid str, value = (jwt_string, expiry timestamp)
 _exchange_store: dict[str, tuple[str, float]] = {}
 
 _SCOPES = ["User.Read"]
@@ -36,7 +34,6 @@ def _msal_app() -> msal.ConfidentialClientApplication:
 async def microsoft_login() -> RedirectResponse:
     state = str(uuid.uuid4())
     _state_store[state] = time.time() + 300
-
     auth_url = _msal_app().get_authorization_request_url(
         scopes=_SCOPES,
         state=state,
@@ -75,7 +72,6 @@ async def microsoft_callback(
     ms_oid = id_claims.get("oid", "")
     name = id_claims.get("name", "") or id_claims.get("preferred_username", "")
 
-    # Fetch email from Graph — id_token may only have preferred_username
     async with httpx.AsyncClient() as client:
         graph_resp = await client.get(
             "https://graph.microsoft.com/v1.0/me",
@@ -91,7 +87,6 @@ async def microsoft_callback(
     if not email or not ms_oid:
         return RedirectResponse(url=f"{error_redirect}missing_user_claims")
 
-    # Upsert: look up by ms_oid first, then email (for pre-existing password users)
     result_db = await db.execute(
         select(User).where(or_(User.ms_oid == ms_oid, User.email == email))
     )
@@ -141,4 +136,40 @@ async def microsoft_token(
 
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)) -> UserOut:
+    return UserOut.model_validate(current_user)
+
+
+@router.get("/api-key")
+async def get_api_key(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if not current_user.api_key:
+        current_user.api_key = secrets.token_urlsafe(32)
+        await db.commit()
+        await db.refresh(current_user)
+    return {"api_key": current_user.api_key}
+
+
+@router.post("/mcp-complete", response_model=UserOut)
+async def mcp_complete(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark Claude/MCP setup as completed for this user."""
+    current_user.mcp_setup_done = True
+    await db.commit()
+    await db.refresh(current_user)
+    return UserOut.model_validate(current_user)
+
+
+@router.post("/mcp-reset", response_model=UserOut)
+async def mcp_reset(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reset Claude/MCP setup so the guide shows again."""
+    current_user.mcp_setup_done = False
+    await db.commit()
+    await db.refresh(current_user)
     return UserOut.model_validate(current_user)

@@ -33,6 +33,7 @@ class UserOut(BaseModel):
     role: UserRole
     avatar_url: Optional[str] = None
     is_active: bool
+    mcp_setup_done: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -77,6 +78,62 @@ class ProjectUpdate(BaseModel):
     blockers: Optional[str] = None
     latest_update: Optional[str] = None
     kanban_order: Optional[int] = None
+
+
+class ProjectKanbanOut(BaseModel):
+    """Slim project schema for the Kanban board — no nested task lists.
+    Excludes tasks/insights/health_records to avoid async lazy-load errors."""
+    id: UUID
+    title: str
+    description: Optional[str] = None
+    status: ProjectStatus
+    priority: PriorityLevel
+    owner_id: Optional[UUID] = None
+    progress_pct: int
+    due_date: Optional[date] = None
+    tags: List[str] = []
+    stakeholders: List[str] = []
+    blockers: Optional[str] = None
+    health_score: int = 100
+    latest_update: Optional[str] = None
+    kanban_order: int = 0
+    created_at: datetime
+    updated_at: datetime
+    owner: Optional["UserOut"] = None
+    assignees: List["UserOut"] = []   # all people with tasks in this project
+    tasks: List = []
+    insights: List = []
+    health_records: List = []
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """Override to manually build dict, avoiding SQLAlchemy lazy-load on relationships."""
+        data = {
+            "id": obj.id,
+            "title": obj.title,
+            "description": obj.description,
+            "status": obj.status,
+            "priority": obj.priority,
+            "owner_id": obj.owner_id,
+            "progress_pct": obj.progress_pct,
+            "due_date": obj.due_date,
+            "tags": obj.tags or [],
+            "stakeholders": obj.stakeholders or [],
+            "blockers": obj.blockers,
+            "health_score": obj.health_score,
+            "latest_update": obj.latest_update,
+            "kanban_order": obj.kanban_order,
+            "created_at": obj.created_at,
+            "updated_at": obj.updated_at,
+            "owner": UserOut.model_validate(obj.owner) if obj.owner else None,
+            "assignees": [],  # populated separately in the kanban endpoint
+            "tasks": [],
+            "insights": [],
+            "health_records": [],
+        }
+        return cls(**data)
+
+    model_config = {"from_attributes": True}
 
 
 class ProjectOut(BaseModel):
@@ -126,6 +183,7 @@ class TaskCreate(BaseModel):
     priority: PriorityLevel = PriorityLevel.medium
     assigned_to: Optional[UUID] = None
     due_date: Optional[date] = None
+    is_private: bool = False
 
 
 class TaskUpdate(BaseModel):
@@ -134,8 +192,18 @@ class TaskUpdate(BaseModel):
     status: Optional[ProjectStatus] = None
     priority: Optional[PriorityLevel] = None
     assigned_to: Optional[UUID] = None
+    project_id: Optional[UUID] = None   # move to different project
     due_date: Optional[date] = None
     is_completed: Optional[bool] = None
+    is_private: Optional[bool] = None
+
+
+class ProjectMini(BaseModel):
+    id: UUID
+    title: str
+    status: ProjectStatus
+    priority: PriorityLevel
+    model_config = {"from_attributes": True}
 
 
 class TaskOut(BaseModel):
@@ -146,11 +214,14 @@ class TaskOut(BaseModel):
     status: ProjectStatus
     priority: PriorityLevel
     assigned_to: Optional[UUID] = None
+    created_by: Optional[UUID] = None
     due_date: Optional[date] = None
     is_completed: bool
+    is_private: bool = False
     completed_at: Optional[datetime] = None
     created_at: datetime
     assignee: Optional[UserOut] = None
+    project: Optional[ProjectMini] = None
 
     model_config = {"from_attributes": True}
 
@@ -435,6 +506,7 @@ class DashboardStats(BaseModel):
     high_priority_projects: List[ProjectOut]
     stale_projects: List[ProjectOut]
     ai_insights: List[AIInsightOut]
+    priority_distribution: dict = {}
 
 
 # Allow forward references

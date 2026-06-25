@@ -34,8 +34,8 @@ async def get_embedding(text_input: str) -> List[float]:
         result = resp.json()
 
     # HF returns [[vec]] for single-string input or [vec] — normalise to flat list
-    if isinstance(result, list) and result and isinstance(result[0], list):
-        if result[0] and isinstance(result[0][0], list):
+    if isinstance(result, list) and isinstance(result[0], list):
+        if isinstance(result[0][0], list):
             # Nested mean-pooling fallback: average token vectors
             vectors = result[0]
             dim = len(vectors[0])
@@ -93,7 +93,7 @@ async def embed_and_store_bg(
         async with AsyncSessionLocal() as db:
             await embed_and_store(db, content_type, content_id, text_input, metadata)
     except Exception as exc:
-        logger.error(f"embed_and_store_bg failed for {content_type}:{content_id}: {exc}", exc_info=True)
+        logger.warning(f"embed_and_store_bg failed for {content_type}:{content_id}: {exc}")
 
 
 async def semantic_search(

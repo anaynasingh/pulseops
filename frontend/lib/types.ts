@@ -2,7 +2,7 @@
 
 export type UserRole = "admin" | "contributor" | "viewer" | "requester";
 export type ProjectStatus =
-  | "intake" | "todo" | "in_progress" | "blocked" | "review" | "done" | "potential";
+  | "intake" | "todo" | "in_progress" | "blocked" | "review" | "done" | "potential" | "cancelled";
 export type PriorityLevel = "low" | "medium" | "high" | "urgent";
 export type HealthStatus = "healthy" | "at_risk" | "delayed" | "blocked";
 export type IntakeStatus = "pending" | "confirmed" | "rejected";
@@ -15,6 +15,7 @@ export interface User {
   role: UserRole;
   avatar_url?: string;
   is_active: boolean;
+  mcp_setup_done: boolean;
   created_at: string;
 }
 
@@ -26,11 +27,14 @@ export interface Task {
   status: ProjectStatus;
   priority: PriorityLevel;
   assigned_to?: string;
+  created_by?: string;
   due_date?: string;
   is_completed: boolean;
+  is_private: boolean;
   completed_at?: string;
   created_at: string;
   assignee?: User;
+  project?: { id: string; title: string; status: ProjectStatus; priority: PriorityLevel };
 }
 
 export interface Notification {
@@ -88,6 +92,7 @@ export interface Project {
   created_at: string;
   updated_at: string;
   owner?: User;
+  assignees?: User[];   // all people with tasks in this project (kanban view)
   tasks: Task[];
   insights: AIInsight[];
   health_records: ProjectHealth[];
@@ -174,6 +179,7 @@ export interface DashboardStats {
   high_priority_projects: Project[];
   stale_projects: Project[];
   ai_insights: AIInsight[];
+  priority_distribution: Record<string, number>;
 }
 
 // Kanban column definitions
@@ -192,6 +198,14 @@ export const PRIORITY_CONFIG: Record<PriorityLevel, { label: string; color: stri
   medium: { label: "Medium", color: "text-blue-400",   bg: "bg-blue-900/30" },
   high:   { label: "High",   color: "text-amber-400",  bg: "bg-amber-900/30" },
   urgent: { label: "Urgent", color: "text-red-400",    bg: "bg-red-900/30" },
+};
+
+// Light mode — solid coloured backgrounds with white text for maximum contrast
+export const PRIORITY_CONFIG_LIGHT: Record<PriorityLevel, { label: string; color: string; bg: string }> = {
+  low:    { label: "Low",    color: "text-white", bg: "bg-slate-500" },
+  medium: { label: "Medium", color: "text-white", bg: "bg-blue-600" },
+  high:   { label: "High",   color: "text-white", bg: "bg-amber-500" },
+  urgent: { label: "Urgent", color: "text-white", bg: "bg-red-600" },
 };
 
 export const HEALTH_CONFIG: Record<HealthStatus, { label: string; color: string; dot: string }> = {

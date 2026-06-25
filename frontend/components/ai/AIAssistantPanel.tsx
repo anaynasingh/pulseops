@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { PRIORITY_CONFIG } from "@/lib/types";
 import type { PriorityLevel } from "@/lib/types";
+import { DedupeModal } from "@/components/ai/DedupeModal";
 
 interface ProposedTask {
   title: string;
@@ -19,6 +20,7 @@ interface ProposedTask {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  checking?: boolean;   // true while dedup is running
   // for propose_tasks action
   proposedTasks?: ProposedTask[];
   proposedProjectId?: string | null;
@@ -36,16 +38,24 @@ const QUICK_PROMPTS = [
 export function AIAssistantPanel() {
   const { toggleAIAssistant } = useUIStore();
   const queryClient = useQueryClient();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?",
-    },
-  ]);
+  const STORAGE_KEY = "pulseops_chat_history";
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === "undefined") return [{ role: "assistant", content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [{ role: "assistant", content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }];
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dedupeResult, setDedupeResult] = useState<any>(null);
+  const [dedupeProjectId, setDedupeProjectId] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,19 +69,40 @@ export function AIAssistantPanel() {
     setLoading(true);
 
     try {
-      const res = await aiApi.chat(text);
+      // Build plain-text history from existing messages (skip initial greeting, cap at 20)
+      const history = messages
+        .filter((m) => m.content && !m.proposedTasks)
+        .slice(-20)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const res = await aiApi.chat(text, undefined, history);
 
       if (res.action === "propose_tasks" && res.proposed_tasks?.length > 0) {
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
-            content: res.reply,
-            proposedTasks: res.proposed_tasks,
-            proposedProjectId: res.project_id || null,
-            tasksConfirmed: false,
-          },
-        ]);
+        // Add the reply first, with a checking indicator
+        setMessages((m) => [...m, { role: "assistant", content: res.reply, checking: true }]);
+        try {
+          const dedup = await aiApi.checkDuplicates(res.proposed_tasks, text);
+          const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
+          if (hasIssues) {
+            setDedupeResult(dedup);
+            setDedupeProjectId(res.project_id || undefined);
+            setMessages((m) => m.map((msg, i) =>
+              i === m.length - 1 ? { ...msg, checking: false } : msg
+            ));
+          } else {
+            setMessages((m) => m.map((msg, i) =>
+              i === m.length - 1
+                ? { ...msg, checking: false, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
+                : msg
+            ));
+          }
+        } catch {
+          setMessages((m) => m.map((msg, i) =>
+            i === m.length - 1
+              ? { ...msg, checking: false, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
+              : msg
+          ));
+        }
       } else {
         const answer = res.reply || "I analyzed your workspace but couldn't generate a response.";
         setMessages((m) => [...m, { role: "assistant", content: answer }]);
@@ -91,6 +122,16 @@ export function AIAssistantPanel() {
   };
 
   return (
+    <>
+    {/* Dedup confirmation modal */}
+    {dedupeResult && (
+      <DedupeModal
+        result={dedupeResult}
+        projectId={dedupeProjectId}
+        onDone={() => { setDedupeResult(null); queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }); }}
+        onCancel={() => setDedupeResult(null)}
+      />
+    )}
     <div className="fixed right-0 top-0 bottom-0 w-80 bg-[#080f20] border-l border-slate-800 flex flex-col z-20 shadow-2xl">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3.5 border-b border-slate-800">
@@ -99,6 +140,13 @@ export function AIAssistantPanel() {
         <span className="text-[10px] text-green-400 bg-green-900/30 border border-green-800/40 px-1.5 py-0.5 rounded">
           GPT-4o
         </span>
+        <button
+          onClick={() => { const initial = [{ role: "assistant" as const, content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }]; setMessages(initial); try { localStorage.removeItem(STORAGE_KEY); } catch {} }}
+          className="text-slate-600 hover:text-slate-400 transition-colors text-[10px]"
+          title="Clear chat"
+        >
+          clear
+        </button>
         <button onClick={toggleAIAssistant} className="text-slate-500 hover:text-white transition-colors ml-1">
           ×
         </button>
@@ -135,6 +183,18 @@ export function AIAssistantPanel() {
               )}
               {msg.content}
             </div>
+
+            {/* Dedup checking indicator */}
+            {msg.checking && (
+              <div className="mt-2 flex items-center gap-2 px-1">
+                <div className="flex gap-0.5">
+                  {[0,1,2].map(i => (
+                    <div key={i} className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                  ))}
+                </div>
+                <span className="text-[11px] text-indigo-400">Checking for duplicates…</span>
+              </div>
+            )}
 
             {/* Task proposal UI */}
             {msg.proposedTasks && msg.proposedTasks.length > 0 && !msg.tasksConfirmed && (
@@ -191,6 +251,7 @@ export function AIAssistantPanel() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -227,7 +288,7 @@ function ProposedTasksCard({
     try {
       const selectedTasks = Array.from(selectedIndices).map((i) => tasks[i]);
       const result = await aiApi.confirmTasks(
-        selectedTasks as Record<string, unknown>[],
+        selectedTasks as unknown as Record<string, unknown>[],
         projectId || null
       );
       onConfirm(result.tasks_created);

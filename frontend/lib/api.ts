@@ -1,6 +1,10 @@
 /**
  * PulseOps — Typed API Client
  * Thin wrapper around axios pointing at FastAPI backend.
+ *
+ * NOTE: All collection endpoints use trailing slashes (e.g. "/projects/")
+ * to avoid FastAPI's 307 redirect. On Railway (cross-origin), browsers drop
+ * the Authorization header when following a redirect, causing silent 401s.
  */
 import axios from "axios";
 
@@ -29,16 +33,27 @@ export const authApi = {
   exchangeCode: (code: string) =>
     api.post("/auth/microsoft/token", { code }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
+  getApiKey: () => api.get("/auth/api-key").then((r) => r.data.api_key as string),
+  mcpComplete: () => api.post("/auth/mcp-complete").then((r) => r.data),
+  mcpReset: () => api.post("/auth/mcp-reset").then((r) => r.data),
+};
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+
+export const usersApi = {
+  list: () => api.get("/users/").then((r) => r.data),
 };
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 export const projectsApi = {
   list: (params?: Record<string, unknown>) =>
-    api.get("/projects", { params }).then((r) => r.data),
+    api.get("/projects/", { params }).then((r) => r.data),
+  listKanban: (params?: Record<string, unknown>) =>
+    api.get("/projects/kanban", { params }).then((r) => r.data),
   get: (id: string) => api.get(`/projects/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) =>
-    api.post("/projects", data).then((r) => r.data),
+    api.post("/projects/", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch(`/projects/${id}`, data).then((r) => r.data),
   delete: (id: string) => api.delete(`/projects/${id}`),
@@ -55,9 +70,9 @@ export const kanbanApi = {
 
 export const tasksApi = {
   list: (params?: Record<string, unknown>) =>
-    api.get("/tasks", { params }).then((r) => r.data),
+    api.get("/tasks/", { params }).then((r) => r.data),
   create: (data: Record<string, unknown>) =>
-    api.post("/tasks", data).then((r) => r.data),
+    api.post("/tasks/", data).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch(`/tasks/${id}`, data).then((r) => r.data),
   delete: (id: string) => api.delete(`/tasks/${id}`),
@@ -66,8 +81,8 @@ export const tasksApi = {
 // ── AI ────────────────────────────────────────────────────────────────────────
 
 export const aiApi = {
-  chat: (message: string, project_id?: string) =>
-    api.post("/ai/chat", { message, project_id }).then((r) => r.data),
+  chat: (message: string, project_id?: string, history?: { role: string; content: string }[]) =>
+    api.post("/ai/chat", { message, project_id, history }).then((r) => r.data),
   intake: (raw_input: string, team_id?: string) =>
     api.post("/ai/intake", { raw_input, team_id }).then((r) => r.data),
   confirmIntake: (intake_id: string, data: Record<string, unknown>) =>
@@ -90,6 +105,10 @@ export const aiApi = {
     api.get(`/ai/insights/${project_id}`).then((r) => r.data),
   dismissInsight: (insight_id: string) =>
     api.delete(`/ai/insights/${insight_id}/dismiss`),
+  checkDuplicates: (proposed_tasks: Record<string, unknown>[], context?: string) =>
+    api.post("/ai/check-duplicates", { proposed_tasks, context }).then((r) => r.data),
+  applyDedupDecisions: (confirmations: Record<string, unknown>[], project_id?: string) =>
+    api.post("/ai/apply-dedup-decisions", { confirmations, project_id }).then((r) => r.data),
 };
 
 // ── Search ────────────────────────────────────────────────────────────────────
@@ -104,6 +123,7 @@ export const searchApi = {
 
 export const analyticsApi = {
   dashboard: () => api.get("/analytics/dashboard").then((r) => r.data),
+  myDashboard: () => api.get("/analytics/my-dashboard").then((r) => r.data),
   health: (project_id: string) =>
     api.get(`/analytics/health/${project_id}`).then((r) => r.data),
   gantt: () => api.get("/analytics/gantt").then((r) => r.data),

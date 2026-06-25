@@ -8,6 +8,62 @@ import { formatDate, getDaysUntil, initials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/types";
 
+// Collect all people on this project (assignees + owner, deduplicated)
+function ProjectAssignees({ project }: { project: Project }) {
+  const seen = new Set<string>();
+  const members: { id: string; name: string }[] = [];
+
+  // Use the dedicated assignees field from the kanban endpoint
+  for (const a of (project as any).assignees ?? []) {
+    if (!seen.has(a.id)) {
+      seen.add(a.id);
+      members.push({ id: a.id, name: a.name });
+    }
+  }
+
+  // Fall back to task assignees (for project detail view where tasks are loaded)
+  for (const task of project.tasks ?? []) {
+    if (task.assignee && !seen.has(task.assignee.id)) {
+      seen.add(task.assignee.id);
+      members.push({ id: task.assignee.id, name: task.assignee.name });
+    }
+  }
+
+  // Include owner if not already shown
+  if (project.owner && !seen.has(project.owner.id)) {
+    members.unshift({ id: project.owner.id, name: project.owner.name });
+  }
+
+  if (members.length === 0) {
+    return <span className="text-[11px] text-slate-600">Unassigned</span>;
+  }
+
+  const visible = members.slice(0, 3);
+  const overflow = members.length - visible.length;
+  const label = members.map((m) => m.name.split(" ")[0]).join(", ");
+
+  return (
+    <div className="flex items-center gap-1.5" title={members.map((m) => m.name).join(", ")}>
+      <div className="flex -space-x-1.5">
+        {visible.map((m) => (
+          <div
+            key={m.id}
+            className="w-5 h-5 rounded-full bg-indigo-700 border border-[#0f1629] flex items-center justify-center"
+          >
+            <span className="text-[9px] text-white font-medium leading-none">{initials(m.name)}</span>
+          </div>
+        ))}
+        {overflow > 0 && (
+          <div className="w-5 h-5 rounded-full bg-slate-700 border border-[#0f1629] flex items-center justify-center">
+            <span className="text-[8px] text-slate-300 font-medium leading-none">+{overflow}</span>
+          </div>
+        )}
+      </div>
+      <span className="text-[11px] text-slate-500 truncate max-w-[80px]">{label}</span>
+    </div>
+  );
+}
+
 interface ProjectCardProps {
   project: Project;
   isDragging?: boolean;
@@ -118,18 +174,9 @@ export function ProjectCard({ project, isDragging }: ProjectCardProps) {
           </div>
         )}
 
-        {/* Bottom row: owner + due date */}
+        {/* Bottom row: assignees + due date */}
         <div className="flex items-center justify-between">
-          {project.owner ? (
-            <div className="flex items-center gap-1.5">
-              <div className="w-5 h-5 rounded-full bg-indigo-700 flex items-center justify-center">
-                <span className="text-[9px] text-white font-medium">{initials(project.owner.name)}</span>
-              </div>
-              <span className="text-[11px] text-slate-500 truncate max-w-[80px]">{project.owner.name}</span>
-            </div>
-          ) : (
-            <span className="text-[11px] text-slate-600">Unassigned</span>
-          )}
+          <ProjectAssignees project={project} />
 
           {project.due_date && (
             <span className={cn(

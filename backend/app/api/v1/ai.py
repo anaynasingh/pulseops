@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.models import (
     Project, Task, AIInsight, AISummary, RequestIntake, MeetingTranscript,
-    EmailIngestion, ProjectHealth, User, IntakeStatus
+    EmailIngestion, ProjectHealth, User, IntakeStatus, TranscriptSearchLog
 )
 import logging
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ Generate structured project information from this request.
         suggested_subtasks=ai_output.suggested_subtasks,
         suggested_next_steps=ai_output.suggested_next_steps,
         suggested_due_date=due_date,
-        suggested_priority=PriorityLevel(ai_output.suggested_priority) if ai_output.suggested_priority in PriorityLevel._value2member_map_ else PriorityLevel.medium,
+        suggested_priority=PriorityLevel(ai_output.suggested_priority),
         suggested_owners=ai_output.suggested_owners,
         ai_reasoning=ai_output.ai_reasoning,
         submitted_by=current_user.id,
@@ -316,8 +316,25 @@ Transcript:
         uploaded_by=current_user.id,
     )
     db.add(record)
+
+    # Auto-log every transcript analysis for Graph API diagnostics
+    search_log = TranscriptSearchLog(
+        user_id=current_user.id,
+        search_query=payload.title,
+        returned_title=payload.title,
+        returned_date=str(payload.meeting_date) if payload.meeting_date else None,
+        returned_attendees=ai_output.attendees or [],
+        source=payload.source,
+        was_correct=None,  # user feedback added later via /transcript-feedback
+    )
+    db.add(search_log)
+
     await db.commit()
     await db.refresh(record)
+    await db.refresh(search_log)
+
+    # Store search_log ID on the transcript so feedback can reference it
+    record.meta_log_id = str(search_log.id) if hasattr(record, 'meta_log_id') else None
 
     background_tasks.add_task(
         embed_and_store_bg, "meeting", record.id,
@@ -326,6 +343,89 @@ Transcript:
     )
 
     return TranscriptOut.model_validate(record)
+
+
+class _TranscriptFeedbackRequest(BaseModel):
+    log_id: UUID
+    was_correct: bool
+    correction_note: Optional[str] = None  # "wrong date", "pulled last week's meeting", etc.
+
+
+@router.post("/transcript-feedback", response_model=dict)
+async def transcript_feedback(
+    payload: _TranscriptFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record whether the transcript search returned the right meeting.
+    This builds a dataset for diagnosing Microsoft Graph search issues."""
+    result = await db.execute(
+        select(TranscriptSearchLog).where(TranscriptSearchLog.id == payload.log_id)
+    )
+    log = result.scalar_one_or_none()
+    if not log:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Log entry not found")
+
+    log.was_correct = payload.was_correct
+    log.correction_note = payload.correction_note
+    await db.commit()
+
+    return {
+        "recorded": True,
+        "log_id": str(log.id),
+        "was_correct": log.was_correct,
+        "message": "Thanks — this helps us find the pattern in Graph API errors." if not payload.was_correct else "Great, logged.",
+    }
+
+
+@router.get("/transcript-search-diagnostics", response_model=dict)
+async def transcript_search_diagnostics(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return all transcript search logs for Claude to diagnose Graph API patterns."""
+    result = await db.execute(
+        select(TranscriptSearchLog)
+        .order_by(TranscriptSearchLog.created_at.desc())
+        .limit(100)
+    )
+    logs = result.scalars().all()
+
+    total = len(logs)
+    correct = sum(1 for l in logs if l.was_correct is True)
+    wrong = sum(1 for l in logs if l.was_correct is False)
+    unreviewed = sum(1 for l in logs if l.was_correct is None)
+
+    wrong_logs = [
+        {
+            "id": str(l.id),
+            "searched_for": l.search_query,
+            "got_back": l.returned_title,
+            "date_returned": l.returned_date,
+            "source": l.source,
+            "note": l.correction_note,
+            "at": l.created_at.isoformat(),
+        }
+        for l in logs if l.was_correct is False
+    ]
+
+    return {
+        "summary": {"total": total, "correct": correct, "wrong": wrong, "unreviewed": unreviewed},
+        "accuracy_pct": round((correct / max(correct + wrong, 1)) * 100, 1),
+        "wrong_cases": wrong_logs,
+        "all_logs": [
+            {
+                "id": str(l.id),
+                "query": l.search_query,
+                "returned": l.returned_title,
+                "source": l.source,
+                "correct": l.was_correct,
+                "at": l.created_at.isoformat(),
+            }
+            for l in logs
+        ],
+    }
 
 
 @router.post("/transcript/{transcript_id}/create-tasks", response_model=dict, status_code=201)
@@ -493,7 +593,7 @@ Stakeholders: {', '.join(project.stakeholders) if project.stakeholders else 'Non
     )
 
     return PrioritySuggestionOut(
-        suggested_priority=PriorityLevel(ai_output.suggested_priority) if ai_output.suggested_priority in PriorityLevel._value2member_map_ else PriorityLevel.medium,
+        suggested_priority=PriorityLevel(ai_output.suggested_priority),
         reasoning=ai_output.reasoning,
         factors=ai_output.factors,
     )
@@ -542,6 +642,7 @@ Format as a numbered list."""
 class _ChatRequest(BaseModel):
     message: str
     project_id: Optional[str] = None
+    history: List[dict] = []  # [{role: "user"|"assistant", content: str}]
 
 
 class _IntentOutput(BaseModel):
@@ -553,16 +654,20 @@ class _IntentOutput(BaseModel):
     proposed_tasks: Optional[List[dict]] = None  # for multi-task proposals
 
 
-_INTENT_SYSTEM = """You are an intent classifier for a project management assistant.
+_INTENT_SYSTEM = """You are an intent classifier for a team project management assistant called PulseOps.
+
 Classify the user message into one of these intents:
 - create_project: user wants to create a new project
 - create_task: user wants to create a task (possibly within a project)
-- query: user is asking a question about their workspace
-- summarize: user wants a summary
+- query: user is asking a question about their workspace, projects, tasks, meetings, team, or workload
+- summarize: user wants a summary of projects, tasks, or activity
 
-Also extract:
-- title: a short clear title (max 8 words) for the project or task if applicable
-- description: a brief description of what needs to be done (1-2 sentences)
+If the message is NOT related to project management, task tracking, team work, meetings, or the app itself, classify as:
+- off_topic: anything unrelated — general knowledge, coding help, math, writing essays, recipes, jokes, weather, news, etc.
+
+Also extract (for create_project / create_task only):
+- title: a short clear title (max 8 words)
+- description: a brief description (1-2 sentences)
 - priority: low, medium, high, or urgent (infer from context; default medium)
 - project_title: the name of the project the task belongs to (for create_task only)
 
@@ -591,18 +696,22 @@ async def ai_chat(
     """Agentic AI assistant — understands intent and takes action."""
 
     # ── Step 1: classify intent ───────────────────────────────────────────────
-    try:
-        intent_result: _IntentOutput = await structured_completion(
-            system_prompt=_INTENT_SYSTEM,
-            user_prompt=payload.message,
-            response_model=_IntentOutput,
-            temperature=0.1,
-        )
-    except Exception as exc:
-        logger.error(f"Intent classification failed: {exc}", exc_info=True)
-        return {"reply": "Sorry, I couldn't process that right now. Please try again.", "action": "error"}
+    intent_result: _IntentOutput = await structured_completion(
+        system_prompt=_INTENT_SYSTEM,
+        user_prompt=payload.message,
+        response_model=_IntentOutput,
+        temperature=0.1,
+    )
 
     # ── Step 2: act on intent ─────────────────────────────────────────────────
+
+    # Refuse off-topic questions immediately — no LLM call needed
+    if intent_result.intent == "off_topic":
+        return {
+            "reply": "I'm focused on your team's projects and tasks — I can't help with that here. "
+                     "Try asking me about your projects, tasks, meetings, priorities, or team workload.",
+            "action": "off_topic",
+        }
 
     if intent_result.intent == "create_project":
         priority = intent_result.priority or "medium"
@@ -614,6 +723,7 @@ async def ai_chat(
             status=ProjectStatus.intake,
             priority=PriorityLevel(priority),
             created_by=current_user.id,
+            owner_id=current_user.id,
         )
         db.add(project)
         await db.commit()
@@ -634,23 +744,16 @@ async def ai_chat(
             target_project = res.scalar_one_or_none()
 
         if not target_project and payload.project_id:
-            try:
-                res = await db.execute(select(Project).where(Project.id == UUID(payload.project_id)))
-                target_project = res.scalar_one_or_none()
-            except ValueError:
-                pass
+            res = await db.execute(select(Project).where(Project.id == UUID(payload.project_id)))
+            target_project = res.scalar_one_or_none()
 
         # Extract all tasks from the message via second structured completion
-        try:
-            multi_output: _MultiTaskOutput = await structured_completion(
-                system_prompt=_MULTI_TASK_SYSTEM,
-                user_prompt=payload.message,
-                response_model=_MultiTaskOutput,
-                temperature=0.2,
-            )
-        except Exception as exc:
-            logger.error(f"Task extraction failed: {exc}", exc_info=True)
-            return {"reply": "Sorry, I couldn't extract tasks right now. Please try again.", "action": "error"}
+        multi_output: _MultiTaskOutput = await structured_completion(
+            system_prompt=_MULTI_TASK_SYSTEM,
+            user_prompt=payload.message,
+            response_model=_MultiTaskOutput,
+            temperature=0.2,
+        )
 
         proposed_tasks = multi_output.tasks or []
         n = len(proposed_tasks)
@@ -672,9 +775,9 @@ async def ai_chat(
     if not projects:
         context = "The workspace is empty — no projects yet."
     else:
-        blocked = [p for p in projects if p.status == ProjectStatus.blocked]
-        urgent = [p for p in projects if p.priority == PriorityLevel.urgent]
-        overdue = [p for p in projects if p.due_date and p.due_date < date.today() and p.status != ProjectStatus.done]
+        blocked = [p for p in projects if p.status == "blocked"]
+        urgent = [p for p in projects if p.priority == "urgent"]
+        overdue = [p for p in projects if p.due_date and p.due_date < date.today() and p.status != "done"]
         context = f"Workspace: {len(projects)} projects | {len(blocked)} blocked | {len(urgent)} urgent | {len(overdue)} overdue\n\n"
         for p in projects[:20]:
             context += f"- [{p.status}] {p.title} | {p.priority} priority | {p.progress_pct}% done | due {p.due_date or 'none'}"
@@ -682,20 +785,260 @@ async def ai_chat(
                 context += f" | BLOCKED: {p.blockers}"
             context += "\n"
 
-    CHAT_SYSTEM = """You are PulseOps AI, an intelligent assistant in a project management platform.
-You can see the user's workspace. Answer their question directly and concisely.
-Be specific. Use bullet points where helpful. Max 150 words."""
+    CHAT_SYSTEM = """You are PulseOps AI, an assistant built exclusively for project and task management.
+You have access to the user's workspace data below.
 
-    try:
-        answer = await chat_completion(
-            system_prompt=f"{CHAT_SYSTEM}\n\nContext:\n{context}",
-            user_prompt=payload.message,
-            temperature=0.4,
-        )
-    except Exception as exc:
-        logger.error(f"Chat completion failed: {exc}", exc_info=True)
-        return {"reply": "Sorry, I couldn't respond right now. Please try again.", "action": "error"}
+Your scope is strictly limited to:
+- Projects, tasks, deadlines, priorities, and blockers
+- Team workload and assignments
+- Meeting outcomes and action items
+- Workspace summaries and status updates
+
+If asked anything outside this scope (general knowledge, coding, writing, math, recipes, news, etc.)
+respond with: "I'm focused on your team's work — I can't help with that here."
+
+Answer questions about the workspace directly and concisely. Use bullet points where helpful. Max 150 words."""
+
+    answer = await chat_completion(
+        system_prompt=f"{CHAT_SYSTEM}\n\nContext:\n{context}",
+        user_prompt=payload.message,
+        temperature=0.4,
+        history=payload.history[-20:] if payload.history else None,
+    )
     return {"reply": answer}
+
+
+# ── Task Deduplication + Smart Update Agent ──────────────────────────────────
+
+class _DedupeTaskIn(BaseModel):
+    title: str
+    description: Optional[str] = None
+    priority: str = "medium"
+    project_name: Optional[str] = None
+
+
+class _DedupeRequest(BaseModel):
+    proposed_tasks: List[_DedupeTaskIn]
+    context: Optional[str] = None   # meeting summary or transcript snippet
+
+
+class _DedupeMatch(BaseModel):
+    proposed_title: str
+    match_type: str           # "duplicate" | "update" | "new"
+    existing_task_id: Optional[str] = None
+    existing_task_title: Optional[str] = None
+    existing_task_status: Optional[str] = None
+    confidence: float         # 0-1
+    suggestion: str           # human-readable explanation
+    suggested_action: str     # "skip" | "update_status" | "create" | "merge"
+    suggested_status: Optional[str] = None   # if update_status
+
+
+_DEDUPE_SYSTEM = """You are a task deduplication agent for a team project management tool.
+
+Analyse each PROPOSED task against EXISTING tasks. Return a JSON object with key "matches" containing an array.
+
+Each element in "matches" MUST have exactly these fields:
+{
+  "proposed_title": "<exact proposed task title>",
+  "match_type": "duplicate" | "update" | "new",
+  "existing_task_id": "<UUID string from existing list>" | null,
+  "existing_task_title": "<title of matching existing task>" | null,
+  "existing_task_status": "<status of matching existing task>" | null,
+  "confidence": <float 0.0-1.0>,
+  "suggestion": "<one sentence: what you found and why>",
+  "suggested_action": "skip" | "update_status" | "create",
+  "suggested_status": "done" | "in_progress" | null
+}
+
+Rules:
+- "duplicate": proposed task is essentially the same as existing (even if worded differently). Use "skip".
+- "update": the context implies an existing task changed status (e.g. feature was demoed = done). Use "update_status".
+- "new": no close match found. Use "create".
+- Be fuzzy with titles — "Fix CORS bug" == "Add CORS whitelist for Stephen"
+- confidence above 0.75 = match found; below = probably new
+- Return ALL proposed tasks in the array, even if they are new"""
+
+
+@router.post("/check-duplicates", response_model=dict)
+async def check_task_duplicates(
+    payload: _DedupeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Check proposed tasks against existing ones.
+    Returns matches, duplicates, and smart update suggestions.
+    User must confirm before anything is created or changed."""
+
+    # Load all existing open tasks for this user's projects
+    assigned_proj_ids = select(Task.project_id).where(Task.assigned_to == current_user.id).scalar_subquery()
+    existing_res = await db.execute(
+        select(Task)
+        .where(
+            Task.is_completed == False,
+            Task.status != "cancelled",
+            Task.project_id.in_(assigned_proj_ids),
+        )
+        .order_by(Task.created_at.desc())
+        .limit(100)
+    )
+    existing_tasks = existing_res.scalars().all()
+
+    if not existing_tasks:
+        # No existing tasks — everything is new
+        return {
+            "matches": [
+                {"proposed_title": t.title, "match_type": "new", "suggested_action": "create",
+                 "confidence": 1.0, "suggestion": "No existing tasks to compare against."}
+                for t in payload.proposed_tasks
+            ],
+            "summary": f"All {len(payload.proposed_tasks)} tasks are new.",
+            "duplicates_found": 0,
+            "updates_suggested": 0,
+        }
+
+    # Build context for the AI
+    existing_list = "\n".join([
+        f"- [{t.id}] \"{t.title}\" | status:{t.status.value} | priority:{t.priority.value}"
+        + (f" | project:{t.project_id}" if t.project_id else "")
+        for t in existing_tasks
+    ])
+    proposed_list = "\n".join([
+        f"- \"{t.title}\"" + (f" | {t.description[:100]}" if t.description else "")
+        for t in payload.proposed_tasks
+    ])
+    context_note = f"\nMeeting context:\n{payload.context[:500]}" if payload.context else ""
+
+    user_prompt = f"""EXISTING TASKS ({len(existing_tasks)}):
+{existing_list}
+
+PROPOSED NEW TASKS ({len(payload.proposed_tasks)}):
+{proposed_list}{context_note}
+
+Analyse each proposed task against the existing list. Return a JSON array."""
+
+    import json as _json
+    from app.services.ai_service import client as _client, MODEL as _MODEL
+    response = await _client.chat.completions.create(
+        model=_MODEL,
+        messages=[
+            {"role": "system", "content": _DEDUPE_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.1,
+    )
+
+    raw = response.choices[0].message.content
+    try:
+        parsed = _json.loads(raw)
+        # Handle various response shapes
+        if isinstance(parsed, list):
+            matches = parsed
+        elif isinstance(parsed, dict):
+            matches = (
+                parsed.get("matches") or
+                parsed.get("tasks") or
+                parsed.get("results") or
+                list(parsed.values())[0] if parsed else []
+            )
+        else:
+            matches = []
+        # Ensure required fields exist on each match
+        for m in matches:
+            m.setdefault("match_type", "new")
+            m.setdefault("suggested_action", "create" if m["match_type"] == "new" else "skip")
+            m.setdefault("confidence", 0.9 if m["match_type"] != "new" else 0.5)
+    except Exception as e:
+        logging.warning(f"Dedup parse error: {e} — raw: {raw[:200]}")
+        matches = [{"proposed_title": t.title, "match_type": "new", "suggested_action": "create", "confidence": 1.0, "suggestion": "Could not analyse — treating as new."} for t in payload.proposed_tasks]
+
+    duplicates = sum(1 for m in matches if m.get("match_type") == "duplicate")
+    updates = sum(1 for m in matches if m.get("match_type") == "update")
+    new_tasks = sum(1 for m in matches if m.get("match_type") == "new")
+
+    return {
+        "matches": matches,
+        "summary": f"Found {duplicates} duplicate(s), {updates} update suggestion(s), {new_tasks} new task(s).",
+        "duplicates_found": duplicates,
+        "updates_suggested": updates,
+    }
+
+
+class _ApplyDedupeRequest(BaseModel):
+    """User has reviewed the suggestions and confirmed which to apply."""
+    confirmations: List[dict]   # [{proposed_title, action: "skip"|"create"|"update_status", task_id?, new_status?}]
+    project_id: Optional[str] = None
+
+
+@router.post("/apply-dedup-decisions", response_model=dict, status_code=201)
+async def apply_dedup_decisions(
+    payload: _ApplyDedupeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Apply the user-confirmed deduplication decisions.
+    - skip: don't create the task
+    - create: create as new task
+    - update_status: update existing task status"""
+
+    created = []
+    updated = []
+    skipped = []
+
+    for conf in payload.confirmations:
+        action = conf.get("action", "create")
+        title = conf.get("proposed_title", "")
+
+        if action == "skip":
+            skipped.append(title)
+
+        elif action == "update_status" and conf.get("task_id"):
+            from uuid import UUID as _UUID
+            task_res = await db.execute(select(Task).where(Task.id == _UUID(conf["task_id"])))
+            task = task_res.scalar_one_or_none()
+            if task:
+                new_status = conf.get("new_status", "done")
+                task.status = ProjectStatus(new_status)
+                if new_status == "done":
+                    task.is_completed = True
+                    from datetime import datetime as _dt
+                    task.completed_at = _dt.utcnow()
+                updated.append(f"{task.title} → {new_status}")
+
+        elif action == "create":
+            # Find project
+            proj = None
+            if payload.project_id:
+                from uuid import UUID as _UUID2
+                proj_res = await db.execute(select(Project).where(Project.id == _UUID2(payload.project_id)))
+                proj = proj_res.scalar_one_or_none()
+            if not proj:
+                proj_res = await db.execute(select(Project).where(Project.title == "Task Planner App").limit(1))
+                proj = proj_res.scalar_one_or_none()
+            if proj:
+                new_task = Task(
+                    title=conf.get("proposed_title", "New task"),
+                    description=conf.get("description"),
+                    status=ProjectStatus.todo,
+                    priority=PriorityLevel(conf.get("priority", "medium")),
+                    project_id=proj.id,
+                    assigned_to=current_user.id,
+                    created_by=current_user.id,
+                )
+                db.add(new_task)
+                created.append(title)
+
+    await db.commit()
+    return {
+        "created": len(created),
+        "updated": len(updated),
+        "skipped": len(skipped),
+        "created_titles": created,
+        "updated_titles": updated,
+        "skipped_titles": skipped,
+        "message": f"Created {len(created)}, updated {len(updated)}, skipped {len(skipped)} tasks.",
+    }
 
 
 # ── Confirm Tasks (from chat proposals) ──────────────────────────────────────

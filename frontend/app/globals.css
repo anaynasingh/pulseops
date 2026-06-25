@@ -71,3 +71,138 @@ body {
   background: rgba(99, 102, 241, 0.15);
   border-left: 2px solid #6366f1;
 }
+
+/* ── Light Mode ──────────────────────────────────────────────────────────── */
+/* Scoped to [data-theme="light"] wrapper in dashboard layout.              */
+/* Uses attribute substring selectors so no CSS escaping issues.            */
+
+[data-theme="light"] {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* Sidebar */
+[data-theme="light"] aside {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* All hardcoded dark hex backgrounds — catches bg-[#020817], bg-[#080f20], etc. */
+[data-theme="light"] [class*="bg-[#0"] {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] [class*="bg-[#0a"] {
+  background-color: #f4f6fb !important;
+}
+
+/* Sidebar / panel backgrounds — slightly off-white */
+[data-theme="light"] aside [class*="bg-[#0"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* Slate backgrounds */
+[data-theme="light"] [class*="bg-slate-9"] {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] [class*="bg-slate-8"] {
+  background-color: #f1f5f9 !important;
+}
+
+/* Text */
+[data-theme="light"] [class*="text-white"] {
+  color: #0f172a !important;
+}
+[data-theme="light"] [class*="text-slate-1"],
+[data-theme="light"] [class*="text-slate-2"] {
+  color: #1e293b !important;
+}
+[data-theme="light"] [class*="text-slate-3"] {
+  color: #334155 !important;
+}
+[data-theme="light"] [class*="text-slate-4"] {
+  color: #64748b !important;
+}
+[data-theme="light"] [class*="text-slate-5"],
+[data-theme="light"] [class*="text-slate-6"] {
+  color: #94a3b8 !important;
+}
+
+/* ── Priority badge text colours — swap light pastels for dark readable versions */
+[data-theme="light"] [class*="text-amber-"] {
+  color: #92400e !important; /* amber-800 — readable on white */
+}
+[data-theme="light"] [class*="text-red-"] {
+  color: #991b1b !important; /* red-800 */
+}
+[data-theme="light"] [class*="text-blue-"] {
+  color: #1e40af !important; /* blue-800 */
+}
+[data-theme="light"] [class*="text-green-"] {
+  color: #166534 !important; /* green-800 */
+}
+[data-theme="light"] [class*="text-indigo-"] {
+  color: #3730a3 !important; /* indigo-800 */
+}
+[data-theme="light"] [class*="text-violet-"] {
+  color: #5b21b6 !important; /* violet-800 */
+}
+[data-theme="light"] [class*="text-purple-"] {
+  color: #6b21a8 !important; /* purple-800 */
+}
+
+/* ── Priority badge backgrounds — swap dark translucent for light pastels */
+[data-theme="light"] [class*="bg-amber-"] {
+  background-color: #fef3c7 !important; /* amber-100 */
+}
+[data-theme="light"] [class*="bg-red-"] {
+  background-color: #fee2e2 !important; /* red-100 */
+}
+[data-theme="light"] [class*="bg-blue-"] {
+  background-color: #dbeafe !important; /* blue-100 */
+}
+[data-theme="light"] [class*="bg-green-"] {
+  background-color: #dcfce7 !important; /* green-100 */
+}
+
+/* Keep indigo/violet accent buttons looking intentional */
+[data-theme="light"] [class*="bg-indigo-6"],
+[data-theme="light"] [class*="bg-indigo-7"] {
+  background-color: #4f46e5 !important; /* stay indigo */
+}
+[data-theme="light"] [class*="bg-indigo-6"] [class*="text-white"],
+[data-theme="light"] [class*="bg-indigo-7"] [class*="text-white"] {
+  color: #ffffff !important; /* button text stays white */
+}
+[data-theme="light"] [class*="bg-indigo-9"],
+[data-theme="light"] [class*="bg-indigo-8"] {
+  background-color: #e0e7ff !important; /* indigo-100 for subtle backgrounds */
+}
+
+/* Dot indicators — keep as small colored dots */
+[data-theme="light"] [class*="bg-amber-4"] { background-color: #d97706 !important; }
+[data-theme="light"] [class*="bg-red-4"]   { background-color: #dc2626 !important; }
+[data-theme="light"] [class*="bg-green-4"] { background-color: #16a34a !important; }
+[data-theme="light"] [class*="bg-blue-4"]  { background-color: #2563eb !important; }
+[data-theme="light"] [class*="bg-indigo-5"] { background-color: #6366f1 !important; }
+
+/* Borders */
+[data-theme="light"] [class*="border-slate-8"] {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] [class*="border-slate-7"] {
+  border-color: #cbd5e1 !important;
+}
+
+/* Inputs / selects */
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] input::placeholder { color: #94a3b8 !important; }
+
+/* Scrollbar */
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

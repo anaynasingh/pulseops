@@ -5,6 +5,7 @@ import type { ActivityLog } from "@/lib/types";
 
 const ACTION_LABELS: Record<string, string> = {
   created: "created project",
+  task_created: "added task",
   moved: "moved to",
   status_changed: "changed status to",
   priority_changed: "changed priority to",
@@ -14,14 +15,16 @@ const ACTION_LABELS: Record<string, string> = {
 export function ActivityFeed({
   activities,
   loading,
+  title = "Recent Activity",
 }: {
   activities: ActivityLog[];
   loading?: boolean;
+  title?: string;
 }) {
   return (
     <div className="bg-[#0f1629] border border-slate-800 rounded-xl p-5">
       <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-        <span>Recent Activity</span>
+        <span>{title}</span>
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 ai-pulse" />
       </h3>
 

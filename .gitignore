@@ -1,32 +1,37 @@
-﻿# Dependencies
-node_modules/
-frontend/.next/
-
 # Python
-backend/venv/
 __pycache__/
 *.pyc
-backend/.env
-
-# Env files
+*.pyo
+*.pyd
+.Python
+env/
+venv/
 .env
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
 
 # Misc
-.DS_Store
 *.log
-run_schema.py
-# Claude Code local overrides
-.claude/settings.local.json
-.claude/.aigile-notice
-.claude/.aigile-backup-run-*
-CLAUDE.md.aigile-backup
-AIGILE_CORRECTIONS.md.aigile-backup
-.aigile/*
-!.aigile/manifests
-!.aigile/manifests/**
-.understand-anything/intermediate/
-.understand-anything/diff-overlay.json
-.understand-anything/tmp/
-!.aigile/delegation
-!.aigile/delegation/**

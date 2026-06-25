@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
 import { authApi } from "@/lib/api";
 
 const ERROR_MESSAGES: Record<string, string> = {

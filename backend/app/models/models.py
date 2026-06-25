@@ -33,6 +33,7 @@ class ProjectStatus(str, enum.Enum):
     review = "review"
     done = "done"
     potential = "potential"
+    cancelled = "cancelled"
 
 
 class PriorityLevel(str, enum.Enum):
@@ -62,16 +63,6 @@ class SummaryType(str, enum.Enum):
     blocker = "blocker"
 
 
-class EntityType(str, enum.Enum):
-    project = "project"
-    task = "task"
-    comment = "comment"
-    meeting = "meeting"
-    email = "email"
-    attachment = "attachment"
-    user = "user"
-
-
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -82,9 +73,11 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ms_oid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    api_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.contributor)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    mcp_setup_done: Mapped[bool] = mapped_column(Boolean, default=False)
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -166,8 +159,8 @@ class Task(Base):
     assigned_to: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_private: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_reminded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     kanban_order: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -220,7 +213,7 @@ class Notification(Base):
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    entity_type: Mapped[Optional[str]] = mapped_column(SAEnum(EntityType, name="entity_type", create_type=False), nullable=True)
+    entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -294,6 +287,23 @@ class RequestIntake(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     submitter: Mapped[Optional["User"]] = relationship("User", foreign_keys=[submitted_by])
+
+
+class TranscriptSearchLog(Base):
+    """Logs every meeting transcript search so we can diagnose Graph API issues."""
+    __tablename__ = "transcript_search_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    search_query: Mapped[Optional[str]] = mapped_column(Text, nullable=True)         # what was searched
+    returned_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True) # what Graph returned
+    returned_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)   # meeting date returned
+    returned_attendees: Mapped[List[str]] = mapped_column(ARRAY(String), default=list)
+    source: Mapped[str] = mapped_column(String(50), default="manual")                 # manual / graph / mcp
+    was_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)       # user feedback: right meeting?
+    correction_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)       # what was wrong
+    transcript_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class MeetingTranscript(Base):

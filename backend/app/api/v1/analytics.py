@@ -32,6 +32,14 @@ async def get_dashboard(
     total_res = await db.execute(select(func.count()).select_from(Project))
     total = total_res.scalar()
 
+    # Priority distribution across ALL projects (used by analytics page)
+    priority_counts_res = await db.execute(
+        select(Project.priority, func.count(Project.id).label("cnt"))
+        .where(Project.status.notin_([ProjectStatus.done]))
+        .group_by(Project.priority)
+    )
+    priority_distribution = {row.priority.value: row.cnt for row in priority_counts_res}
+
     active_res = await db.execute(
         select(func.count()).select_from(Project).where(
             Project.status.in_([ProjectStatus.in_progress, ProjectStatus.review])
@@ -111,17 +119,21 @@ async def get_dashboard(
     )
     insights = [AIInsightOut.model_validate(i) for i in insights_res.scalars().all()]
 
-    # Team workload (count projects per owner)
+    # Team workload — count projects each user is involved in
+    # (owns OR has at least one task assigned)
+    from sqlalchemy import distinct
     workload_res = await db.execute(
-        select(User.name, User.id, func.count(Project.id).label("count"))
-        .join(Project, Project.owner_id == User.id)
+        select(User.name, User.id, func.count(distinct(Project.id)).label("count"))
+        .join(Task, Task.assigned_to == User.id)
+        .join(Project, Project.id == Task.project_id)
         .where(Project.status.notin_([ProjectStatus.done]))
         .group_by(User.id, User.name)
-        .order_by(func.count(Project.id).desc())
+        .order_by(func.count(distinct(Project.id)).desc())
     )
     team_workload = [
         {"user_id": str(row.id), "name": row.name, "project_count": row.count}
         for row in workload_res
+        if row.count > 0
     ]
 
     return DashboardStats(
@@ -136,7 +148,84 @@ async def get_dashboard(
         high_priority_projects=high_priority,
         stale_projects=stale,
         ai_insights=insights,
+        priority_distribution=priority_distribution,
     )
+
+
+@router.get("/my-dashboard")
+async def get_my_dashboard(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Personal dashboard — everything scoped to the logged-in user."""
+    from app.schemas.schemas import TaskOut
+    from sqlalchemy.orm import selectinload as sl
+
+    now = datetime.utcnow()
+
+    # My tasks (assigned to me, not completed)
+    my_tasks_res = await db.execute(
+        select(Task)
+        .options(sl(Task.assignee), sl(Task.project))
+        .where(Task.assigned_to == current_user.id, Task.is_completed == False)
+        .order_by(
+            # urgent first, then high, medium, low
+            text("CASE tasks.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END"),
+            Task.due_date.nullslast(),
+            Task.created_at,
+        )
+    )
+    my_tasks = my_tasks_res.scalars().all()
+
+    # My overdue tasks
+    overdue_tasks = [t for t in my_tasks if t.due_date and t.due_date < now.date()]
+
+    # My projects (owned by me or tasks assigned to me)
+    my_proj_ids_res = await db.execute(
+        select(Task.project_id).where(Task.assigned_to == current_user.id).distinct()
+    )
+    my_proj_ids = [r[0] for r in my_proj_ids_res.all()]
+
+    my_projects_res = await db.execute(
+        select(Project)
+        .options(sl(Project.owner), sl(Project.tasks).selectinload(Task.assignee),
+                 sl(Project.insights), sl(Project.health_records))
+        .where(
+            Project.id.in_(my_proj_ids),
+            Project.status.notin_([ProjectStatus.done])
+        )
+        .order_by(_PRIORITY_ORDER_SQL)
+        .limit(10)
+    )
+    my_projects = my_projects_res.scalars().all()
+
+    # My high priority tasks (urgent + high)
+    my_high = [t for t in my_tasks if t.priority in (PriorityLevel.urgent, PriorityLevel.high)]
+
+    # Recent activity FOR me (tasks assigned to me, created/updated)
+    my_activity_res = await db.execute(
+        select(ActivityLog)
+        .options(sl(ActivityLog.user))
+        .where(ActivityLog.user_id == current_user.id)
+        .order_by(ActivityLog.created_at.desc())
+        .limit(20)
+    )
+    from app.schemas.schemas import ActivityLogOut, ProjectOut
+    my_activity = [ActivityLogOut.model_validate(a) for a in my_activity_res.scalars().all()]
+
+    return {
+        "user": {"id": str(current_user.id), "name": current_user.name, "email": current_user.email},
+        "stats": {
+            "my_total_tasks": len(my_tasks),
+            "my_high_priority": len(my_high),
+            "my_overdue": len(overdue_tasks),
+            "my_projects": len(my_projects),
+        },
+        "my_tasks": [TaskOut.model_validate(t) for t in my_tasks[:20]],
+        "my_overdue_tasks": [TaskOut.model_validate(t) for t in overdue_tasks],
+        "my_projects": [ProjectOut.model_validate(p) for p in my_projects],
+        "my_activity": my_activity,
+    }
 
 
 @router.get("/gantt", response_model=dict)

@@ -8,15 +8,19 @@ import type { Project } from "@/lib/types";
 export function HighPriorityList({
   projects,
   loading,
+  title = "High Priority Work",
+  emptyMessage = "No high priority projects",
 }: {
   projects: Project[];
   loading?: boolean;
+  title?: string;
+  emptyMessage?: string;
 }) {
   return (
     <div className="bg-[#0f1629] border border-slate-800 rounded-xl p-5">
       <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
         <span>🔥</span>
-        <span>High Priority Work</span>
+        <span>{title}</span>
       </h3>
 
       {loading ? (
@@ -26,7 +30,7 @@ export function HighPriorityList({
           ))}
         </div>
       ) : projects.length === 0 ? (
-        <p className="text-slate-500 text-sm text-center py-6">No high priority projects</p>
+        <p className="text-slate-500 text-sm text-center py-6">{emptyMessage}</p>
       ) : (
         <div className="space-y-2">
           {projects.map((p) => {
