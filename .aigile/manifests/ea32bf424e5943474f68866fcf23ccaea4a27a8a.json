@@ -14,6 +14,14 @@
     {
       "name": "Building",
       "entered_at": "2026-06-25T22:18:26Z"
+    },
+    {
+      "name": "Probing",
+      "entered_at": "2026-06-25T22:23:56Z"
+    },
+    {
+      "name": "Piloting",
+      "entered_at": "2026-06-25T22:42:15Z"
     }
   ],
   "streams": [],
