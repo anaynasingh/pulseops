@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Building
-**Active burst:** task-balance-chart
-**Burst base:** aa97c9b54164611d1004e8bc1bedc28c512e678e
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Build: Stream A (backend task-balance endpoint) + Stream B (TaskBalanceChart frontend) in parallel
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Plan reference:** None
+**Next action:** Burst complete — task-balance-chart shipped (chart, dashboard split, optimistic updates). Ready for next burst.
 **Last updated:** 2026-06-25
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -34,13 +34,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream backend builders:** claude
-**Stream backend handoff head:** None
-**Stream backend status:** IN PROGRESS
-
-**Stream frontend builders:** claude
-**Stream frontend handoff head:** None
-**Stream frontend status:** IN PROGRESS
+<!-- No active streams. -->
 
 ## Gemini Reviews
 
