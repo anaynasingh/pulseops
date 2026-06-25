@@ -36,11 +36,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 **Stream frontend-quick-prompts builders:** claude
 **Stream frontend-quick-prompts handoff head:** None
-**Stream frontend-quick-prompts status:** IN PROGRESS
+**Stream frontend-quick-prompts status:** BUILD COMPLETE (tsc + next build clean)
 
 **Stream backend-task-context builders:** claude
 **Stream backend-task-context handoff head:** None
-**Stream backend-task-context status:** IN PROGRESS
+**Stream backend-task-context status:** BUILD COMPLETE (py_compile + import smoke clean)
 
 ## Gemini Reviews
 
