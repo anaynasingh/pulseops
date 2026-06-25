@@ -9,7 +9,6 @@ import { StatsGrid } from "@/components/dashboard/StatsGrid";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AIInsightsPanel } from "@/components/dashboard/AIInsightsPanel";
 import { HighPriorityList } from "@/components/dashboard/HighPriorityList";
-import { MyTasksList } from "@/components/dashboard/MyTasksList";
 import { MyTaskSplit } from "@/components/dashboard/MyTaskSplit";
 import type { DashboardStats } from "@/lib/types";
 
@@ -126,9 +125,8 @@ export default function DashboardPage() {
             <MyTaskSplit tasks={myData?.my_tasks ?? []} loading={myLoading} />
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-5">
-              {/* Full interactive task list — 2 cols */}
-              <div className="xl:col-span-2 space-y-4 md:space-y-5">
-                <MyTasksList tasks={myData?.my_tasks ?? []} loading={myLoading} />
+              {/* Recent activity — 2 cols */}
+              <div className="xl:col-span-2">
                 <ActivityFeed activities={myData?.my_activity ?? []} loading={myLoading} title="My Recent Activity" />
               </div>
 
