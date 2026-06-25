@@ -29,10 +29,10 @@ interface Message {
 }
 
 const QUICK_PROMPTS = [
-  "What projects are blocked?",
-  "Summarize today's activity",
-  "What should I prioritize?",
-  "Show overdue projects",
+  "What should I focus on today?",
+  "What are my overdue tasks?",
+  "What are my top priorities right now?",
+  "What's due this week?",
 ];
 
 export function AIAssistantPanel() {

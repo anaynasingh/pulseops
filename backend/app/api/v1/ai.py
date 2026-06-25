@@ -785,8 +785,50 @@ async def ai_chat(
                 context += f" | BLOCKED: {p.blockers}"
             context += "\n"
 
+    # Per-user task context — so task-focused prompts ("what should I focus on
+    # today?") answer from the user's actual assigned work, not project summaries.
+    tasks_res = await db.execute(
+        select(Task)
+        .options(selectinload(Task.project))
+        .where(
+            Task.assigned_to == current_user.id,
+            Task.is_completed == False,
+            Task.status != "cancelled",
+        )
+    )
+    my_tasks = list(tasks_res.scalars().all())
+    # Soonest-due first, tasks with no due date last.
+    my_tasks.sort(key=lambda t: (t.due_date is None, t.due_date or date.max))
+    my_tasks = my_tasks[:15]
+
+    today = date.today()
+    if my_tasks:
+        overdue_n = sum(1 for t in my_tasks if t.due_date and t.due_date < today)
+        due_today_n = sum(1 for t in my_tasks if t.due_date == today)
+        header = f"{len(my_tasks)} open"
+        if overdue_n:
+            header += f", {overdue_n} overdue"
+        if due_today_n:
+            header += f", {due_today_n} due today"
+        context += f"\nYour tasks ({header}):\n"
+        for t in my_tasks:
+            proj = t.project.title if t.project else "no project"
+            if t.due_date is None:
+                due = "no due date"
+            elif t.due_date < today:
+                due = f"OVERDUE (was due {t.due_date})"
+            elif t.due_date == today:
+                due = "due TODAY"
+            else:
+                due = f"due {t.due_date}"
+            context += f"- {t.title} | {t.priority} priority | {due} | project: {proj}\n"
+    else:
+        context += "\nYou have no open assigned tasks.\n"
+
     CHAT_SYSTEM = """You are PulseOps AI, an assistant built exclusively for project and task management.
-You have access to the user's workspace data below.
+You have access to the user's workspace data below. The "Your tasks" section lists the
+current user's own open tasks; when they ask what to focus on, what to prioritise, or what is
+overdue or due soon, answer from that section first (overdue and due-today tasks come first).
 
 Your scope is strictly limited to:
 - Projects, tasks, deadlines, priorities, and blockers
