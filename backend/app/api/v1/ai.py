@@ -803,14 +803,27 @@ async def ai_chat(
     # Aggregate counts over the FULL set BEFORE truncation, so the model is told
     # the true workload even when only the soonest tasks are listed. (Mirrors the
     # projects block above, which counts on the full list and displays [:20].)
+    def _prio(t):
+        return getattr(t.priority, "value", t.priority)
+
     total_open = len(my_tasks)
     overdue_n = sum(1 for t in my_tasks if t.due_date and t.due_date < today)
     due_today_n = sum(1 for t in my_tasks if t.due_date == today)
     due_week_n = sum(1 for t in my_tasks if t.due_date and today <= t.due_date <= week_end)
+    urgent_n = sum(1 for t in my_tasks if _prio(t) == "urgent")
+    high_n = sum(1 for t in my_tasks if _prio(t) == "high")
 
-    # Soonest-due first, tasks with no due date last; list only the soonest 15.
-    my_tasks.sort(key=lambda t: (t.due_date is None, t.due_date or date.max))
-    shown = my_tasks[:15]
+    # Relevance order so priority work always surfaces in the listed window,
+    # not just the soonest-dated: overdue first, then by priority, then due date
+    # (undated last). Cap is generous so a normal personal backlog is never cut.
+    _PRIO_RANK = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+    my_tasks.sort(key=lambda t: (
+        not (t.due_date and t.due_date < today),   # overdue first
+        _PRIO_RANK.get(_prio(t), 2),               # then urgent/high
+        t.due_date is None,                        # dated before undated
+        t.due_date or date.max,                    # then soonest due
+    ))
+    shown = my_tasks[:40]
 
     if total_open:
         header = f"{total_open} open"
@@ -820,6 +833,10 @@ async def ai_chat(
             header += f", {due_today_n} due today"
         if due_week_n:
             header += f", {due_week_n} due within 7 days"
+        if urgent_n:
+            header += f", {urgent_n} urgent"
+        if high_n:
+            header += f", {high_n} high"
         context += f"\nYour tasks ({header}):\n"
         for t in shown:
             proj = t.project.title if t.project else "no project"
@@ -833,7 +850,7 @@ async def ai_chat(
                 due = f"due {t.due_date}"
             context += f"- {t.title} | {t.priority} priority | {due} | project: {proj}\n"
         if total_open > len(shown):
-            context += f"...and {total_open - len(shown)} more open task(s) not listed (showing the {len(shown)} soonest-due). The counts above are complete.\n"
+            context += f"...and {total_open - len(shown)} more open task(s) not listed (showing the {len(shown)} most relevant by overdue/priority/due-date). The counts above are complete.\n"
     else:
         context += "\nYou have no open assigned tasks.\n"
 

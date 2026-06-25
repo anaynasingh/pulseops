@@ -29,6 +29,11 @@ PENDING: [2026-06-25] After a direct-to-prod merge that bypasses dev, back-sync 
          Why: the dashboard fix shipped via a branch cherry-picked off prod/master and squash-merged to prod; dev was left holding the inferior pre-Gemini version of the same two files until manually back-synced.
          How to apply: whenever a hotfix lands on prod/master without going through dev, sync the changed files (or merge) back into dev before starting any new work, so dev never trails prod.
 
+PENDING: [2026-06-25] When an LLM gets a truncated list as "the user's data", make the truncation lossless for the questions asked.
+         Builder: claude.
+         Why: assistant-task-prompts fed /ai/chat a due-date-sorted, 15-item slice of the user's tasks and told the model to answer priority/overdue questions from it. Codex flagged (R1) counts computed on the truncated slice misstated the workload, and (R2) priority work could be hidden behind the due-date slice. Two rounds on the same truncation mechanism.
+         How to apply: when building LLM context from a capped query, compute aggregate counts over the FULL set, order by relevance to the prompt intent (not one arbitrary key), use a cap generous enough that realistic volumes are never cut, and label any truncation. Ideally make retrieval intent-aware (priority vs due-date vs blocked) rather than one fixed slice.
+
 PENDING: [2026-06-25] git fetch the prod remote before reasoning about branch divergence.
          Builder: n/a.
          Why: local prod/master tracking ref was stale at e774a64; `git log dev..prod/master` showed empty and `git checkout prod/master -- <file>` pulled pre-fix content. `git ls-remote` shows the true remote tip but does not update local tracking refs.
