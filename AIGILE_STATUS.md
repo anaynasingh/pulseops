@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** assistant-task-prompts
-**Burst base:** ea32bf424e5943474f68866fcf23ccaea4a27a8a
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run probe retrospective then /ag-ship to ship assistant-task-prompts.
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Plan reference:** None
+**Next action:** Burst complete — assistant-task-prompts shipped to prod (PR #6, 2812192) and auto-deployed; dev back-synced; burst archived to closed/. Ready for next burst.
 **Last updated:** 2026-06-25
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -34,13 +34,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream frontend-quick-prompts builders:** claude
-**Stream frontend-quick-prompts handoff head:** None
-**Stream frontend-quick-prompts status:** COMPLETE
-
-**Stream backend-task-context builders:** claude
-**Stream backend-task-context handoff head:** None
-**Stream backend-task-context status:** COMPLETE (Codex R1+R2 HIGH fixed; timezone MEDIUM deferred)
+<!-- No active streams. -->
 
 ## Gemini Reviews
 
@@ -76,4 +70,4 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - [2026-06-25] focus-reminder-toggle — sidebar toggle knob containment + "Test"→"Preview" + a11y. PASS. Shipped prod f617541 (PR #3).
 - [2026-06-25] reminder-modal — "Focus Check" title + prefetch/skeleton (no empty flash). PASS. Shipped prod 7180bed (PR #4).
 - [2026-06-25] remove-my-tasks — dropped redundant dashboard My Tasks list + deleted component. PASS. Shipped prod db4bacd (PR #5).
-- [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed, timezone MEDIUM deferred). Pending /ag-ship.
+- [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed; ship Gemini: week-window + style). Shipped prod 2812192 (PR #6).
