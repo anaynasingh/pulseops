@@ -46,3 +46,10 @@ This file keeps everything.
 **Steer:** Shipped to prod (P33-AI master) via PR #5, squash-merged as db4bacd; dev back-synced after merge.
 **Gemini:** 1 round, 1 MEDIUM — dead `space-y` spacing class on the now-single-child column; applied.
 **Learnings:** Confirmed Railway frontend auto-deploys on merge to master (user observed all prior fixes redeployed automatically) — the long-standing "manual frontend redeploy" assumption is retired; memory updated.
+
+### [2026-06-25] Burst: assistant-task-prompts
+
+**Built:** Stream A — replaced the AI assistant's 4 quick-prompt buttons with task-focused prompts (focus today / overdue / top priorities / due this week). Stream B — `/ai/chat` query branch now loads the user's open assigned tasks into the LLM context with complete aggregate counts (open/overdue/due-today/due-within-7-days/urgent/high), a priority-aware relevance sort (overdue → priority → due date), a generous cap (40), and truncation labelling; plus a system-prompt nudge to answer focus/priority questions from "Your tasks" first.
+**Verify:** PASS — frontend `tsc`+`next build`, backend `py_compile`+import smoke. No automated tests for this burst (per Orchestrator no-tests stance); answer quality not browser-verified locally (no LLM).
+**Steer:** Codex 2 rounds. R1 HIGH — counts computed on truncated slice → fixed (aggregate on full set). R2 HIGH (discovery) — due-date-only sort could hide urgent/high tasks → fixed structurally (relevance sort + cap 40 + priority counts); round loop stopped per round-economics. MEDIUM (server-date vs user-local timezone) DEFERRED both rounds → logged in DEFERRED.md. Self-review (Opus) found no Critical/High.
+**Learnings:** Building LLM context from a capped query is lossy unless counts are computed on the full set and ordering matches prompt intent — two Codex rounds on the same truncation mechanism. PENDING correction filed (intent-aware context). Timezone correctness for date-relative prompts needs the client's local date, not the server's.
