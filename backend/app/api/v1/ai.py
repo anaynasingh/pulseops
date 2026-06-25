@@ -809,7 +809,7 @@ async def ai_chat(
     total_open = len(my_tasks)
     overdue_n = sum(1 for t in my_tasks if t.due_date and t.due_date < today)
     due_today_n = sum(1 for t in my_tasks if t.due_date == today)
-    due_week_n = sum(1 for t in my_tasks if t.due_date and today <= t.due_date <= week_end)
+    due_week_n = sum(1 for t in my_tasks if t.due_date and today <= t.due_date < week_end)
     urgent_n = sum(1 for t in my_tasks if _prio(t) == "urgent")
     high_n = sum(1 for t in my_tasks if _prio(t) == "high")
 
@@ -848,7 +848,7 @@ async def ai_chat(
                 due = "due TODAY"
             else:
                 due = f"due {t.due_date}"
-            context += f"- {t.title} | {t.priority} priority | {due} | project: {proj}\n"
+            context += f"- {t.title} | {_prio(t)} priority | {due} | project: {proj}\n"
         if total_open > len(shown):
             context += f"...and {total_open - len(shown)} more open task(s) not listed (showing the {len(shown)} most relevant by overdue/priority/due-date). The counts above are complete.\n"
     else:
@@ -856,7 +856,7 @@ async def ai_chat(
 
     CHAT_SYSTEM = """You are PulseOps AI, an assistant built exclusively for project and task management.
 You have access to the user's workspace data below. The "Your tasks" section lists the
-current user's own open tasks; when they ask what to focus on, what to prioritise, or what is
+current user's own open tasks; when they ask what to focus on, what to prioritize, or what is
 overdue or due soon, answer from that section first (overdue and due-today tasks come first).
 
 Your scope is strictly limited to:
