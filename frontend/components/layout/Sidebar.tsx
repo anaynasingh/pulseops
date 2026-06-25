@@ -9,6 +9,7 @@ import { cn, initials } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard",  icon: "⬡", label: "Dashboard" },
+  { href: "/day",        icon: "◷", label: "Day View" },
   { href: "/board",      icon: "⊞", label: "Kanban Board" },
   { href: "/gantt",      icon: "▬", label: "Gantt Chart" },
   { href: "/intake",     icon: "✦", label: "AI Intake" },

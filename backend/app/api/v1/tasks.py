@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.models import Task, User, ActivityLog
@@ -47,6 +47,54 @@ async def list_tasks(
     )
     result = await db.execute(query.order_by(Task.kanban_order, Task.created_at))
     return [TaskOut.model_validate(t) for t in result.scalars().all()]
+
+
+@router.get("/day")
+async def day_view(
+    start: datetime = Query(..., description="Local day start as ISO 8601 datetime"),
+    end: datetime = Query(..., description="Local day end (exclusive) as ISO 8601 datetime"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Franklin Covey day view: the current user's tasks scheduled into [start, end)
+    plus their unscheduled incomplete tasks."""
+    from datetime import timezone, timedelta
+
+    # Coerce naive datetimes to UTC (frontend sends tz-aware ISO; this is a guard)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+
+    if end <= start:
+        raise HTTPException(status_code=422, detail="end must be after start")
+    if (end - start) > timedelta(hours=48):
+        raise HTTPException(status_code=422, detail="range too large (max 48h)")
+
+    base = select(Task).options(selectinload(Task.assignee), selectinload(Task.project))
+
+    scheduled_res = await db.execute(
+        base.where(
+            Task.assigned_to == current_user.id,
+            Task.scheduled_at >= start,
+            Task.scheduled_at < end,
+        ).order_by(Task.scheduled_at)
+    )
+    unscheduled_res = await db.execute(
+        base.where(
+            Task.assigned_to == current_user.id,
+            Task.is_completed == False,
+            Task.scheduled_at.is_(None),
+        ).order_by(
+            text("CASE tasks.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END"),
+            Task.created_at,
+        )
+    )
+
+    return {
+        "scheduled": [TaskOut.model_validate(t) for t in scheduled_res.scalars().all()],
+        "unscheduled": [TaskOut.model_validate(t) for t in unscheduled_res.scalars().all()],
+    }
 
 
 @router.post("/", response_model=TaskOut, status_code=status.HTTP_201_CREATED)

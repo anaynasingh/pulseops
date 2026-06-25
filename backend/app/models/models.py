@@ -161,6 +161,8 @@ class Task(Base):
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_private: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_minutes: Mapped[Optional[int]] = mapped_column(Integer, default=60, nullable=True)
     kanban_order: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

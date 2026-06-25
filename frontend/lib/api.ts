@@ -76,6 +76,8 @@ export const tasksApi = {
   update: (id: string, data: Record<string, unknown>) =>
     api.patch(`/tasks/${id}`, data).then((r) => r.data),
   delete: (id: string) => api.delete(`/tasks/${id}`),
+  day: (start: string, end: string) =>
+    api.get("/tasks/day", { params: { start, end } }).then((r) => r.data),
 };
 
 // ── AI ────────────────────────────────────────────────────────────────────────

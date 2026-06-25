@@ -184,6 +184,8 @@ class TaskCreate(BaseModel):
     assigned_to: Optional[UUID] = None
     due_date: Optional[date] = None
     is_private: bool = False
+    scheduled_at: Optional[datetime] = None
+    duration_minutes: Optional[int] = Field(default=None, ge=15, le=1440)
 
 
 class TaskUpdate(BaseModel):
@@ -196,6 +198,8 @@ class TaskUpdate(BaseModel):
     due_date: Optional[date] = None
     is_completed: Optional[bool] = None
     is_private: Optional[bool] = None
+    scheduled_at: Optional[datetime] = None
+    duration_minutes: Optional[int] = Field(default=None, ge=15, le=1440)
 
 
 class ProjectMini(BaseModel):
@@ -219,6 +223,8 @@ class TaskOut(BaseModel):
     is_completed: bool
     is_private: bool = False
     completed_at: Optional[datetime] = None
+    scheduled_at: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
     created_at: datetime
     assignee: Optional[UserOut] = None
     project: Optional[ProjectMini] = None

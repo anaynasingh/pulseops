@@ -32,9 +32,16 @@ export interface Task {
   is_completed: boolean;
   is_private: boolean;
   completed_at?: string;
+  scheduled_at: string | null;
+  duration_minutes: number | null;
   created_at: string;
   assignee?: User;
   project?: { id: string; title: string; status: ProjectStatus; priority: PriorityLevel };
+}
+
+export interface DayViewResponse {
+  scheduled: Task[];
+  unscheduled: Task[];
 }
 
 export interface Notification {
