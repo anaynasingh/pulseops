@@ -797,21 +797,31 @@ async def ai_chat(
         )
     )
     my_tasks = list(tasks_res.scalars().all())
-    # Soonest-due first, tasks with no due date last.
-    my_tasks.sort(key=lambda t: (t.due_date is None, t.due_date or date.max))
-    my_tasks = my_tasks[:15]
 
     today = date.today()
-    if my_tasks:
-        overdue_n = sum(1 for t in my_tasks if t.due_date and t.due_date < today)
-        due_today_n = sum(1 for t in my_tasks if t.due_date == today)
-        header = f"{len(my_tasks)} open"
+    week_end = today + timedelta(days=7)
+    # Aggregate counts over the FULL set BEFORE truncation, so the model is told
+    # the true workload even when only the soonest tasks are listed. (Mirrors the
+    # projects block above, which counts on the full list and displays [:20].)
+    total_open = len(my_tasks)
+    overdue_n = sum(1 for t in my_tasks if t.due_date and t.due_date < today)
+    due_today_n = sum(1 for t in my_tasks if t.due_date == today)
+    due_week_n = sum(1 for t in my_tasks if t.due_date and today <= t.due_date <= week_end)
+
+    # Soonest-due first, tasks with no due date last; list only the soonest 15.
+    my_tasks.sort(key=lambda t: (t.due_date is None, t.due_date or date.max))
+    shown = my_tasks[:15]
+
+    if total_open:
+        header = f"{total_open} open"
         if overdue_n:
             header += f", {overdue_n} overdue"
         if due_today_n:
             header += f", {due_today_n} due today"
+        if due_week_n:
+            header += f", {due_week_n} due within 7 days"
         context += f"\nYour tasks ({header}):\n"
-        for t in my_tasks:
+        for t in shown:
             proj = t.project.title if t.project else "no project"
             if t.due_date is None:
                 due = "no due date"
@@ -822,6 +832,8 @@ async def ai_chat(
             else:
                 due = f"due {t.due_date}"
             context += f"- {t.title} | {t.priority} priority | {due} | project: {proj}\n"
+        if total_open > len(shown):
+            context += f"...and {total_open - len(shown)} more open task(s) not listed (showing the {len(shown)} soonest-due). The counts above are complete.\n"
     else:
         context += "\nYou have no open assigned tasks.\n"
 
