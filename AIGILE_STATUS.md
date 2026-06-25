@@ -8,7 +8,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 **Active burst:** None
 **Burst base:** None
 **Plan reference:** None
-**Next action:** Burst complete — dashboard-complete-gap shipped to Railway prod (PR #2, b67f6dd); dev back-synced to the shipped version. Frontend Railway redeploy still pending (manual). Ready for next burst.
+**Next action:** Burst complete — focus-reminder-toggle shipped to Railway prod (PR #3, f617541); dev back-synced. Manual frontend Railway redeploy still pending — picks up BOTH dashboard-complete-gap (b67f6dd) and focus-reminder-toggle. Ready for next burst.
 **Last updated:** 2026-06-25
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -67,3 +67,4 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 <!-- Long-term burst sequence lives in AIGILE_PLAN/long-term/sequence.md. -->
 
 - [2026-06-25] dashboard-complete-gap — task-completion layout gap fix (AnimatePresence reflow + 300ms check beat). PASS. Shipped prod b67f6dd (PR #2).
+- [2026-06-25] focus-reminder-toggle — sidebar toggle knob containment + "Test"→"Preview" + a11y. PASS. Shipped prod f617541 (PR #3).
