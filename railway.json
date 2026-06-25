@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    "startCommand": "cd frontend && npm start"
   },
   "cron": {
     "description": "Hourly task reminder job — configure as a separate Railway Cron service",
