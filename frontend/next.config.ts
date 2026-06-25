@@ -1,14 +1,22 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Allow images from avatar APIs
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "api.dicebear.com" },
     ],
   },
-  // Transpile packages if needed
   transpilePackages: [],
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
