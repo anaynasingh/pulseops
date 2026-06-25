@@ -17,6 +17,7 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
   const PC = isLight ? PRIORITY_CONFIG_LIGHT : PRIORITY_CONFIG;
 
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [retiredIds, setRetiredIds] = useState<Set<string>>(new Set());
   const [confirmRetire, setConfirmRetire] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -44,7 +45,10 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
   const completeMutation = useMutation({
     mutationFn: (id: string) => tasksApi.update(id, { is_completed: true }),
     onSuccess: () => { setTimeout(() => queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }), 600); },
-    onError: (_, id) => setDoneIds(p => { const n = new Set(p); n.delete(id); return n; }),
+    onError: (_, id) => {
+      setDoneIds(p => { const n = new Set(p); n.delete(id); return n; });
+      setRemovedIds(p => { const n = new Set(p); n.delete(id); return n; });
+    },
   });
   const retireMutation = useMutation({
     mutationFn: (id: string) => tasksApi.update(id, { status: "cancelled" }),
@@ -52,10 +56,15 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
     onError: (_, id) => setRetiredIds(p => { const n = new Set(p); n.delete(id); return n; }),
   });
 
-  const handleComplete = (id: string) => { setDoneIds(p => new Set(p).add(id)); completeMutation.mutate(id); };
+  const handleComplete = (id: string) => {
+    setDoneIds(p => new Set(p).add(id));                 // green check + strike-through immediately
+    completeMutation.mutate(id);
+    // Hold the checked state briefly, then collapse the slot so siblings fly up.
+    setTimeout(() => setRemovedIds(p => new Set(p).add(id)), 300);
+  };
   const handleRetire  = (id: string) => { setConfirmRetire(null); setRetiredIds(p => new Set(p).add(id)); retireMutation.mutate(id); };
 
-  const visible = tasks.filter(t => !doneIds.has(t.id) && !retiredIds.has(t.id));
+  const visible = tasks.filter(t => !removedIds.has(t.id) && !retiredIds.has(t.id));
 
   if (loading) return (
     <div className={`border rounded-xl p-6 ${isLight ? "bg-white border-slate-200" : "bg-[#0f1629] border-slate-800"}`}>
@@ -82,15 +91,10 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
         </h3>
       </div>
 
-      {visible.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-3xl mb-3">🎉</p>
-          <p className={`text-base font-medium ${isLight ? "text-slate-600" : "text-slate-400"}`}>All caught up!</p>
-          <p className={`text-sm mt-1 ${isLight ? "text-slate-400" : "text-slate-600"}`}>No tasks assigned to you.</p>
-        </div>
-      ) : (
-        <div>
-          <AnimatePresence initial={false}>
+      <div>
+        {/* AnimatePresence stays mounted even when visible is empty, so the
+            last task's exit animation plays instead of being cut off. */}
+        <AnimatePresence initial={false}>
           {visible.map(task => {
             const daysLeft = getDaysUntil(task.due_date);
             const isOverdue  = daysLeft !== null && daysLeft < 0;
@@ -109,7 +113,7 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
                 exit={{ opacity: 0, height: 0, marginBottom: 0, scale: 0.97 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
                 style={{ overflow: "hidden" }}
-                className="mb-3 last:mb-0"
+                className="mb-3"
               >
               <div className={`flex items-start gap-4 p-4 rounded-xl border transition-all duration-500 group ${
                 isOverdue
@@ -254,9 +258,15 @@ export function MyTasksList({ tasks, loading }: { tasks: Task[]; loading?: boole
               </motion.div>
             );
           })}
-          </AnimatePresence>
-        </div>
-      )}
+        </AnimatePresence>
+        {visible.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-3xl mb-3">🎉</p>
+            <p className={`text-base font-medium ${isLight ? "text-slate-600" : "text-slate-400"}`}>All caught up!</p>
+            <p className={`text-sm mt-1 ${isLight ? "text-slate-400" : "text-slate-600"}`}>No tasks assigned to you.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
