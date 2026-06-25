@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.core.config import settings
-from app.services.reminder_service import run_task_reminders
+from app.services.reminder_service import run_task_reminders, run_block_reminders
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -19,4 +19,5 @@ async def trigger_reminders(
     _: None = Depends(_verify_cron_secret),
 ):
     count = await run_task_reminders(db)
-    return {"reminders_sent": count}
+    block_count = await run_block_reminders(db)
+    return {"reminders_sent": count, "block_reminders_sent": block_count}

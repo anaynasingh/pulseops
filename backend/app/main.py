@@ -118,6 +118,8 @@ async def run_migrations():
         await db.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ"))
         await db.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 60"))
         await db.execute(text("CREATE INDEX IF NOT EXISTS idx_tasks_scheduled_at ON tasks (assigned_to, scheduled_at) WHERE scheduled_at IS NOT NULL"))
+        await db.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMPTZ"))
+        await db.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS block_reminded_at TIMESTAMPTZ"))
         await db.commit()
 
 # Capture MCP auth headers before every request (pure ASGI, not BaseHTTPMiddleware)
