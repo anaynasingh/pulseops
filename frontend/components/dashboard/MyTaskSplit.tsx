@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { tasksApi } from "@/lib/api";
 import { PRIORITY_CONFIG, PRIORITY_CONFIG_LIGHT } from "@/lib/types";
@@ -21,11 +22,10 @@ function TaskCard({
   return (
     <div
       className={`flex items-start gap-3 p-3 rounded-lg border transition-all duration-500 ${
-        done ? "opacity-0 scale-95 pointer-events-none" :
         overdue
           ? isLight ? "bg-red-50 border-red-200" : "bg-red-950/20 border-red-900/40"
           : isLight ? "bg-slate-50 border-slate-200" : "bg-slate-900/50 border-slate-800/50"
-      }`}
+      } ${done ? "pointer-events-none" : ""}`}
     >
       {/* Complete checkbox */}
       <button
@@ -80,12 +80,12 @@ function TaskCard({
 }
 
 function Column({
-  title, icon, tasks, overdue, isLight, accent, doneIds, onComplete,
+  title, icon, tasks, overdue, isLight, accent, doneIds, removedIds, onComplete,
 }: {
   title: string; icon: string; tasks: Task[]; overdue: boolean; isLight: boolean; accent: string;
-  doneIds: Set<string>; onComplete: (id: string) => void;
+  doneIds: Set<string>; removedIds: Set<string>; onComplete: (id: string) => void;
 }) {
-  const visible = tasks.filter((t) => !doneIds.has(t.id));
+  const visible = tasks.filter((t) => !removedIds.has(t.id));
   return (
     <div className={`border rounded-xl p-5 flex flex-col ${isLight ? "bg-white border-slate-200" : "bg-[#0f1629] border-slate-800"}`}>
       <div className="flex items-center gap-2 mb-4">
@@ -93,26 +93,38 @@ function Column({
         <h3 className={`text-base font-bold ${isLight ? "text-slate-900" : "text-white"}`}>{title}</h3>
         <span className={`text-sm font-normal px-2 py-0.5 rounded-full ${accent}`}>{visible.length}</span>
       </div>
-      {visible.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center py-8">
-          <p className={`text-sm ${isLight ? "text-slate-400" : "text-slate-600"}`}>
-            {overdue ? "Nothing overdue 🎉" : "Nothing upcoming"}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          {tasks.map((t) => (
-            <TaskCard
+      <div className="flex-1">
+        {/* AnimatePresence stays mounted even when visible is empty, so the
+            last task's exit animation plays instead of being cut off. */}
+        <AnimatePresence initial={false}>
+          {visible.map((t) => (
+            <motion.div
               key={t.id}
-              task={t}
-              overdue={overdue}
-              isLight={isLight}
-              done={doneIds.has(t.id)}
-              onComplete={onComplete}
-            />
+              layout
+              initial={false}
+              exit={{ opacity: 0, height: 0, marginBottom: 0, scale: 0.97 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              style={{ overflow: "hidden" }}
+              className="mb-2.5"
+            >
+              <TaskCard
+                task={t}
+                overdue={overdue}
+                isLight={isLight}
+                done={doneIds.has(t.id)}
+                onComplete={onComplete}
+              />
+            </motion.div>
           ))}
-        </div>
-      )}
+        </AnimatePresence>
+        {visible.length === 0 && (
+          <div className="flex items-center justify-center py-8">
+            <p className={`text-sm ${isLight ? "text-slate-400" : "text-slate-600"}`}>
+              {overdue ? "Nothing overdue 🎉" : "Nothing upcoming"}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -122,16 +134,22 @@ export function MyTaskSplit({ tasks, loading }: { tasks: Task[]; loading?: boole
   const isLight = theme === "light";
   const queryClient = useQueryClient();
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => tasksApi.update(id, { is_completed: true }),
     onSuccess: () => { setTimeout(() => queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }), 600); },
-    onError: (_, id) => setDoneIds((p) => { const n = new Set(p); n.delete(id); return n; }),
+    onError: (_, id) => {
+      setDoneIds((p) => { const n = new Set(p); n.delete(id); return n; });
+      setRemovedIds((p) => { const n = new Set(p); n.delete(id); return n; });
+    },
   });
 
   const handleComplete = (id: string) => {
-    setDoneIds((p) => new Set(p).add(id));
+    setDoneIds((p) => new Set(p).add(id));                 // green check + strike-through immediately
     completeMutation.mutate(id);
+    // Hold the checked state briefly, then collapse the slot so siblings fly up.
+    setTimeout(() => setRemovedIds((p) => new Set(p).add(id)), 300);
   };
 
   if (loading) {
@@ -169,6 +187,7 @@ export function MyTaskSplit({ tasks, loading }: { tasks: Task[]; loading?: boole
         isLight={isLight}
         accent={isLight ? "text-red-700 bg-red-100" : "text-red-400 bg-red-950/40"}
         doneIds={doneIds}
+        removedIds={removedIds}
         onComplete={handleComplete}
       />
       <Column
@@ -179,6 +198,7 @@ export function MyTaskSplit({ tasks, loading }: { tasks: Task[]; loading?: boole
         isLight={isLight}
         accent={isLight ? "text-indigo-700 bg-indigo-100" : "text-indigo-400 bg-indigo-950/40"}
         doneIds={doneIds}
+        removedIds={removedIds}
         onComplete={handleComplete}
       />
     </div>
