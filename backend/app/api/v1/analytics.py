@@ -349,11 +349,8 @@ async def get_task_balance(
 
     result = list(people.values())
 
-    max_count = max(
-        (sum(p["overdue"].values()) for p in result),
-        (sum(p["upcoming"].values()) for p in result),
-        default=1,
-    ) if result else 1
+    totals = [sum(p["overdue"].values()) for p in result] + [sum(p["upcoming"].values()) for p in result]
+    max_count = max(totals + [1])
 
     return TaskBalanceResponse(
         people=[
