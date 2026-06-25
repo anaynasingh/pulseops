@@ -105,6 +105,18 @@ app = FastAPI(
     root_path_in_servers=False,
 )
 
+
+@app.on_event("startup")
+async def run_migrations():
+    from app.db.session import AsyncSessionLocal
+    from sqlalchemy import text
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS ms_oid TEXT"))
+        await db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_ms_oid ON users (ms_oid) WHERE ms_oid IS NOT NULL"))
+        await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key TEXT"))
+        await db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key ON users (api_key) WHERE api_key IS NOT NULL"))
+        await db.commit()
+
 # Capture MCP auth headers before every request (pure ASGI, not BaseHTTPMiddleware)
 app.add_middleware(MCPHeaderMiddleware)
 
