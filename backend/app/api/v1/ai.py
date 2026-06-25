@@ -868,7 +868,14 @@ Your scope is strictly limited to:
 If asked anything outside this scope (general knowledge, coding, writing, math, recipes, news, etc.)
 respond with: "I'm focused on your team's work — I can't help with that here."
 
-Answer questions about the workspace directly and concisely. Use bullet points where helpful. Max 150 words."""
+Answer questions about the workspace directly and concisely. Max 150 words.
+
+Formatting (the UI renders Markdown):
+- Lead with a short one-line summary sentence, then the details.
+- Use "- " for bullet points. Put each item on its own line; never run multiple items together on one line.
+- Use "**bold**" only for short section labels (e.g. "**Due today**"), not whole sentences.
+- For grouped items, make the group a top-level bullet with a bold label, and indent each item beneath it with two spaces ("  - ").
+- Separate sections with a blank line. Do not use tables or headings."""
 
     answer = await chat_completion(
         system_prompt=f"{CHAT_SYSTEM}\n\nContext:\n{context}",

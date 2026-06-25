@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Building
-**Active burst:** day-view-timeblock
-**Burst base:** 6a38a612b16209511fcd04371b32a25cf6d75a4c
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Build: Stream A (backend scheduled_at/duration + GET /tasks/day) + Stream B (/day page) in parallel
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Plan reference:** None
+**Next action:** Burst complete — assistant-task-prompts shipped to prod (PR #6, 2812192) and auto-deployed; dev back-synced; burst archived to closed/. Ready for next burst.
 **Last updated:** 2026-06-25
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -34,13 +34,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream backend builders:** claude
-**Stream backend handoff head:** None
-**Stream backend status:** IN PROGRESS
-
-**Stream frontend builders:** claude
-**Stream frontend handoff head:** None
-**Stream frontend status:** IN PROGRESS
+<!-- No active streams. -->
 
 ## Gemini Reviews
 
@@ -71,3 +65,9 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 <!-- Append completed Bursts. Keep last 5 entries. Full archive in AIGILE_HISTORY.md. -->
 <!-- Long-term burst sequence lives in AIGILE_PLAN/long-term/sequence.md. -->
+
+- [2026-06-25] dashboard-complete-gap — task-completion layout gap fix (AnimatePresence reflow + 300ms check beat). PASS. Shipped prod b67f6dd (PR #2).
+- [2026-06-25] focus-reminder-toggle — sidebar toggle knob containment + "Test"→"Preview" + a11y. PASS. Shipped prod f617541 (PR #3).
+- [2026-06-25] reminder-modal — "Focus Check" title + prefetch/skeleton (no empty flash). PASS. Shipped prod 7180bed (PR #4).
+- [2026-06-25] remove-my-tasks — dropped redundant dashboard My Tasks list + deleted component. PASS. Shipped prod db4bacd (PR #5).
+- [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed; ship Gemini: week-window + style). Shipped prod 2812192 (PR #6).

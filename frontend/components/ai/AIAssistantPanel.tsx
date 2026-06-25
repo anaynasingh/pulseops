@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PRIORITY_CONFIG } from "@/lib/types";
 import type { PriorityLevel } from "@/lib/types";
 import { DedupeModal } from "@/components/ai/DedupeModal";
+import { ChatMarkdown } from "@/components/ai/ChatMarkdown";
 
 interface ProposedTask {
   title: string;
@@ -178,10 +179,16 @@ export function AIAssistantPanel() {
                   : "bg-slate-900/60 border border-slate-800 text-slate-300"
               )}
             >
-              {msg.role === "assistant" && (
-                <span className="text-indigo-400 mr-1">✦</span>
+              {msg.role === "assistant" ? (
+                <div className="flex gap-1.5">
+                  <span className="text-indigo-400 shrink-0">✦</span>
+                  <div className="flex-1 min-w-0">
+                    <ChatMarkdown content={msg.content} />
+                  </div>
+                </div>
+              ) : (
+                msg.content
               )}
-              {msg.content}
             </div>
 
             {/* Dedup checking indicator */}
