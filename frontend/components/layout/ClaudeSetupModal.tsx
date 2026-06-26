@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 
@@ -163,10 +164,15 @@ function Step4Content() {
 export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalProps) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  // Portal is created only after mount so it never runs during SSR/first
+  // hydration pass (document is unavailable server-side in the App Router).
+  const [mounted, setMounted] = useState(false);
   const { setAuth, user, token } = useAuthStore();
   const firstName = userName.split(" ")[0];
   const current = STEP_DEFS[step];
   const isLast = step === STEP_DEFS.length - 1;
+
+  useEffect(() => setMounted(true), []);
 
   const handleDone = async () => {
     setSaving(true);
@@ -188,7 +194,12 @@ export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalP
     }
   };
 
-  return (
+  if (!mounted) return null;
+
+  // Render into document.body so the overlay escapes the sidebar wrapper's
+  // CSS transform (layout.tsx), which would otherwise make `fixed` resolve
+  // against the 256px sidebar box and clamp the modal to the left pane.
+  return createPortal(
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
 
@@ -245,6 +256,7 @@ export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalP
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
