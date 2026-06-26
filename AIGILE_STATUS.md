@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Plan reference:** None
-**Next action:** Burst complete — intake-functional shipped to prod (P33-AI master, PR #8, squash 63a8b48) and auto-deployed; dev back-synced. Live verification (48 tests + manual UI) still to run against the prod deploy. /clear when ready; next session runs /ag-plan.
+**Phase:** Building
+**Active burst:** intake-default-assignee
+**Burst base:** 33f8c4339a147f1ef45ddce148c10d821b805151
+**Plan reference:** AIGILE_PLAN/current/
+**Next action:** Build: backend-intake-default-assignment — add `assigned_to` to IntakeConfirmRequest (schemas.py); resolve owner/assignee via model_fields_set in confirm_intake and apply to Project Routes 1+3 and the task loop (ai.py); extend TestIntakeConfirm with the C1/C2/C3 cases (test_regression.py). Then /ag-probe.
 **Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -34,7 +34,9 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-<!-- No active streams. -->
+**Stream backend-intake-default-assignment builders:** claude
+**Stream backend-intake-default-assignment handoff head:** None
+**Stream backend-intake-default-assignment status:** IN PROGRESS
 
 ## Gemini Reviews
 
