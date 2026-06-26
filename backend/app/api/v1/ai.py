@@ -200,7 +200,13 @@ async def confirm_intake(
     """
     from datetime import datetime as dt
     try:
-        intake_res = await db.execute(select(RequestIntake).where(RequestIntake.id == intake_id))
+        # Atomically claim the intake: FOR UPDATE serializes concurrent confirms for the
+        # same intake_id. The first request holds the row lock until commit; a second
+        # concurrent request blocks, then re-reads intake_status=confirmed and 409s —
+        # preventing duplicate project/task fanout (TOCTOU race).
+        intake_res = await db.execute(
+            select(RequestIntake).where(RequestIntake.id == intake_id).with_for_update()
+        )
         intake = intake_res.scalar_one_or_none()
         if not intake:
             raise HTTPException(status_code=404, detail="Intake not found")

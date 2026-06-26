@@ -452,23 +452,29 @@ class TestIntakeConfirm:
         # single task falls back to the generated title
         assert data["tasks"][0]["title"] == title
 
-    def test_task_to_existing_project(self, anayna_token, anayna_project, intake_factory):
+    def test_task_to_existing_project(self, anayna_token, intake_factory):
+        # Use a DISPOSABLE _reg project (owned by the test user, so editable) rather than
+        # mutating a real project. The intake's project_id points at it after confirm, so
+        # the _reg-guarded fixture teardown cascade-deletes it even if an assertion fails.
+        pr = CLIENT.post(f"{BASE}/projects/", json={"title": "_reg_existing_parent"}, headers=auth(anayna_token))
+        assert pr.status_code == 201, pr.text
+        target = pr.json()
         iid, _ = intake_factory(item_type="task", subtasks=["X", "Y"])
-        r = confirm_intake(anayna_token, iid, {
-            "confirmed_priority": "medium",
-            "item_type": "task",
-            "target_project_id": anayna_project["id"],
-        })
-        assert r.status_code == 201, r.text
-        data = r.json()
-        assert data["item_type"] == "task"
-        assert data["project"]["id"] == anayna_project["id"]   # no spurious new project
-        assert data["tasks_created"] == 2
-        assert all(t["project_id"] == anayna_project["id"] for t in data["tasks"])
-        # Clean up the tasks we added to the (real) existing project — the fixture
-        # teardown deliberately will NOT delete a non-test project.
-        for t in data["tasks"]:
-            delete_task(anayna_token, t["id"])
+        try:
+            r = confirm_intake(anayna_token, iid, {
+                "confirmed_priority": "medium",
+                "item_type": "task",
+                "target_project_id": target["id"],
+            })
+            assert r.status_code == 201, r.text
+            data = r.json()
+            assert data["item_type"] == "task"
+            assert data["project"]["id"] == target["id"]   # no spurious new project
+            assert data["tasks_created"] == 2
+            assert all(t["project_id"] == target["id"] for t in data["tasks"])
+        finally:
+            # Disposable project cascades to its tasks; delete regardless of assertions.
+            delete_project(anayna_token, target["id"])
 
     def test_user_override_wins_over_ai_classification(self, anayna_token, intake_factory):
         # AI said "project"; user overrides to "task" → routed as task.
@@ -513,6 +519,20 @@ class TestIntakeConfirm:
         assert r1.status_code == 201, r1.text
         r2 = confirm_intake(anayna_token, iid, {"confirmed_priority": "medium", "item_type": "project"})
         assert r2.status_code == 409, r2.text
+
+    def test_concurrent_confirms_create_one_set(self, anayna_token, intake_factory):
+        # Two simultaneous confirms for the same intake must NOT both create work.
+        # The FOR UPDATE atomic claim serializes them: exactly one 201, one 409.
+        import concurrent.futures
+        iid, _ = intake_factory(item_type="project", subtasks=["A", "B"])
+
+        def fire():
+            return confirm_intake(anayna_token, iid, {"confirmed_priority": "medium", "item_type": "project"})
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+            r1, r2 = (f.result() for f in [ex.submit(fire), ex.submit(fire)])
+        codes = sorted([r1.status_code, r2.status_code])
+        assert codes == [201, 409], f"expected one 201 + one 409, got {codes}: {r1.text} | {r2.text}"
 
     def test_confirmed_priority_required(self, anayna_token, intake_factory):
         iid, _ = intake_factory(item_type="project", subtasks=["A"])
