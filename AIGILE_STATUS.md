@@ -4,11 +4,13 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Next action:** Burst complete — intake-default-assignee shipped to prod (P33-AI master, PR #9, merge 98316eb) and auto-deployed. Live verification (24 IntakeConfirm tests + manual UI) still to run against the prod deploy. /clear when ready; next session runs /ag-plan.
-**Last updated:** 2026-06-26
+**Phase:** Building
+**Active burst:** guide-modal-center
+**Burst base:** ec8a597a86b10d31ef6076ce5496d19afc1bc438
+**Burst base accepted dirty:** yes - untracked .aigile/retros/ is AI-gile retrospective infra unrelated to the guide-modal-center frontend fix; will not be staged in the burst commit
+**Plan reference:** AIGILE_PLAN/current/
+**Next action:** Build: portal ClaudeSetupModal via createPortal(document.body) so the sidebar-triggered "guide" modal centers on the viewport instead of being clamped to the transformed sidebar pane.
+**Last updated:** 2026-06-26 (guide-modal-center burst opened)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -33,7 +35,9 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-<!-- No active streams. -->
+**Stream portal-the-modal builders:** claude
+**Stream portal-the-modal handoff head:** None
+**Stream portal-the-modal status:** IN PROGRESS
 
 ## Gemini Reviews
 
