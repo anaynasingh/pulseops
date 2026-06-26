@@ -218,6 +218,18 @@ async def confirm_intake(
         intake_type = intake.suggested_item_type if intake.suggested_item_type in ("project", "task") else "project"
         resolved_type = payload.item_type or intake_type
 
+        # Default owner/assignee to the confirming user "unless otherwise specified".
+        # model_fields_set distinguishes an omitted field (=> default to current_user)
+        # from an explicit null (=> caller intends ownerless/unassigned, respected).
+        # A concrete UUID is used as-is. Applied to new projects (Routes 1 + 3) and to
+        # every task created here; an existing project's owner (Route 2) is never touched.
+        resolved_owner_id = (
+            payload.owner_id if "owner_id" in payload.model_fields_set else current_user.id
+        )
+        resolved_assignee_id = (
+            payload.assigned_to if "assigned_to" in payload.model_fields_set else current_user.id
+        )
+
         # Clean subtask titles (JSONB list — guard against non-strings/blanks).
         subtask_titles = [s.strip() for s in (intake.suggested_subtasks or []) if isinstance(s, str) and s.strip()]
 
@@ -230,7 +242,7 @@ async def confirm_intake(
                 description=payload.description or intake.generated_description,
                 status=ProjectStatus.intake,
                 priority=payload.confirmed_priority,  # ← Human-confirmed priority
-                owner_id=payload.owner_id,
+                owner_id=resolved_owner_id,  # confirming user unless owner_id explicitly given
                 team_id=payload.team_id,
                 tags=intake.suggested_tags or [],
                 due_date=intake.suggested_due_date,
@@ -258,7 +270,7 @@ async def confirm_intake(
                     description=payload.description or intake.generated_description,
                     status=ProjectStatus.intake,
                     priority=payload.confirmed_priority,
-                    owner_id=payload.owner_id,
+                    owner_id=resolved_owner_id,  # confirming user unless owner_id explicitly given
                     team_id=payload.team_id,
                     tags=intake.suggested_tags or [],
                     due_date=intake.suggested_due_date,
@@ -277,6 +289,7 @@ async def confirm_intake(
                 title=title,
                 status=ProjectStatus.todo,
                 priority=payload.confirmed_priority,
+                assigned_to=resolved_assignee_id,  # confirming user unless assigned_to explicitly given
                 created_by=current_user.id,
             )
             db.add(t)

@@ -26,6 +26,11 @@ def login(email, password):
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
+def me(token):
+    r = CLIENT.get(f"{BASE}/auth/me", headers=auth(token))
+    assert r.status_code == 200, r.text
+    return r.json()
+
 def get_tasks(token, **params):
     r = CLIENT.get(f"{BASE}/tasks/", headers=auth(token), params=params)
     assert r.status_code == 200
@@ -543,3 +548,131 @@ class TestIntakeConfirm:
         iid, _ = intake_factory(item_type="project", subtasks=["A"])
         r = CLIENT.post(f"{BASE}/ai/intake/{iid}/confirm", json={"confirmed_priority": "medium"})
         assert r.status_code == 401
+
+    # ── Default-assignee behaviour (intake-default-assignee burst) ──────────────
+    # "unless otherwise specified": owner/assignee default to the confirming user
+    # when omitted; an explicit value wins; an explicit null is respected
+    # (model_fields_set omit-vs-null contract).
+
+    def test_project_route_defaults_owner_and_subtasks_to_caller(self, anayna_token, intake_factory):
+        # Route 1, no owner specified → project owner AND all subtasks default to caller.
+        caller_id = me(anayna_token)["id"]
+        iid, _ = intake_factory(item_type="project", subtasks=["A", "B", "C"])
+        r = confirm_intake(anayna_token, iid, {"confirmed_priority": "high", "item_type": "project"})
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["project"]["owner_id"] == caller_id
+        assert data["tasks_created"] == 3
+        assert all(t["assigned_to"] == caller_id for t in data["tasks"])
+
+    def test_project_route_explicit_owner_override_wins(self, anayna_token, stephen_token, intake_factory):
+        # Route 1, explicit owner_id = another user → that user owns it.
+        stephen_id = me(stephen_token)["id"]
+        iid, _ = intake_factory(item_type="project", subtasks=["A"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium", "item_type": "project", "owner_id": stephen_id,
+        })
+        assert r.status_code == 201, r.text
+        assert r.json()["project"]["owner_id"] == stephen_id
+
+    def test_project_route_explicit_null_owner_respected(self, anayna_token, intake_factory):
+        # Route 1, explicit owner_id: null → ownerless (distinct from omitted).
+        iid, _ = intake_factory(item_type="project", subtasks=["A"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium", "item_type": "project", "owner_id": None,
+        })
+        assert r.status_code == 201, r.text
+        assert r.json()["project"]["owner_id"] is None
+
+    def test_task_to_new_project_defaults_owner_and_assignee_to_caller(self, anayna_token, intake_factory):
+        # Route 3, no owner/assignee → new parent owner AND tasks default to caller.
+        caller_id = me(anayna_token)["id"]
+        iid, _ = intake_factory(item_type="task", subtasks=["Do the thing"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium", "item_type": "task", "new_project_title": "_reg_assignee_parent",
+        })
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["project"]["owner_id"] == caller_id
+        assert all(t["assigned_to"] == caller_id for t in data["tasks"])
+
+    def test_task_to_new_project_explicit_owner_override_wins(self, anayna_token, stephen_token, intake_factory):
+        # [C1] Route 3 owner wiring is a SEPARATE constructor from Route 1 — prove it honours override.
+        stephen_id = me(stephen_token)["id"]
+        iid, _ = intake_factory(item_type="task", subtasks=["t"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium", "item_type": "task",
+            "new_project_title": "_reg_route3_owner", "owner_id": stephen_id,
+        })
+        assert r.status_code == 201, r.text
+        assert r.json()["project"]["owner_id"] == stephen_id
+
+    def test_task_to_new_project_explicit_null_owner_respected(self, anayna_token, intake_factory):
+        # [C1] Route 3 explicit owner_id: null → ownerless parent.
+        iid, _ = intake_factory(item_type="task", subtasks=["t"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium", "item_type": "task",
+            "new_project_title": "_reg_route3_null", "owner_id": None,
+        })
+        assert r.status_code == 201, r.text
+        assert r.json()["project"]["owner_id"] is None
+
+    def test_task_to_existing_project_defaults_assignee_owner_unchanged(self, anayna_token, intake_factory):
+        # [C3] Route 2: tasks default to caller; the EXISTING project's owner is NOT mutated,
+        # even when owner_id is explicitly sent in the body.
+        caller_id = me(anayna_token)["id"]
+        pr = CLIENT.post(f"{BASE}/projects/", json={"title": "_reg_existing_owner_guard"}, headers=auth(anayna_token))
+        assert pr.status_code == 201, pr.text
+        target = pr.json()
+        original_owner = target["owner_id"]
+        iid, _ = intake_factory(item_type="task", subtasks=["X", "Y"])
+        try:
+            r = confirm_intake(anayna_token, iid, {
+                "confirmed_priority": "medium", "item_type": "task",
+                "target_project_id": target["id"],
+                # explicit owner_id in body must NOT rewrite the existing project's owner
+                "owner_id": "00000000-0000-0000-0000-000000000001",
+            })
+            assert r.status_code == 201, r.text
+            data = r.json()
+            assert data["project"]["id"] == target["id"]
+            assert data["project"]["owner_id"] == original_owner  # unchanged
+            assert all(t["assigned_to"] == caller_id for t in data["tasks"])
+        finally:
+            delete_project(anayna_token, target["id"])
+
+    def test_explicit_assignee_override_wins(self, anayna_token, stephen_token, intake_factory):
+        # Explicit assigned_to = another user → tasks carry that user; omitted owner still caller.
+        caller_id = me(anayna_token)["id"]
+        stephen_id = me(stephen_token)["id"]
+        iid, _ = intake_factory(item_type="task", subtasks=["t1", "t2"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium", "item_type": "task",
+            "new_project_title": "_reg_assignee_override", "assigned_to": stephen_id,
+        })
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert all(t["assigned_to"] == stephen_id for t in data["tasks"])
+        assert data["project"]["owner_id"] == caller_id  # owner omitted → still caller
+
+    def test_explicit_null_assignee_respected(self, anayna_token, intake_factory):
+        # [C2] Explicit assigned_to: null → tasks unassigned (distinct from omitted).
+        # Catches a `payload.assigned_to or current_user.id` regression.
+        iid, _ = intake_factory(item_type="task", subtasks=["t"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium", "item_type": "task",
+            "new_project_title": "_reg_null_assignee", "assigned_to": None,
+        })
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert all(t["assigned_to"] is None for t in data["tasks"])
+
+    def test_legacy_null_classification_defaults_owner_to_caller(self, anayna_token, intake_factory):
+        # Legacy null-classification (item_type=None) → project AND owner defaults to caller.
+        caller_id = me(anayna_token)["id"]
+        iid, _ = intake_factory(item_type=None, subtasks=["Z"])
+        r = confirm_intake(anayna_token, iid, {"confirmed_priority": "medium"})
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["item_type"] == "project"
+        assert data["project"]["owner_id"] == caller_id

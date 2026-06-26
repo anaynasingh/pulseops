@@ -7,9 +7,9 @@
     "name": "Anayna Singh",
     "email": "anayna.singh@prospect33.com"
   },
-  "status": "in-flight",
+  "status": "finalised",
   "started_at": "2026-06-26T07:58:45Z",
-  "finalised_at": null,
+  "finalised_at": "2026-06-26T09:08:59Z",
   "phases": [
     {
       "name": "Building",
@@ -28,8 +28,22 @@
   "stream_dependency_edges": [],
   "reviews": {
     "codex": null,
-    "gemini": null
+    "gemini": {
+      "recorded_at": "2026-06-26T09:08:59Z",
+      "outcome": "PASS",
+      "pr_number": 8,
+      "notes": "1 MEDIUM (Route 3 payload.description) fixed in 9228042; thread resolved"
+    }
   },
-  "contributors": [],
-  "diff_stat": null
+  "contributors": [
+    {
+      "name": "Anayna",
+      "email": "62555217+anaynasingh@users.noreply.github.com"
+    }
+  ],
+  "diff_stat": {
+    "files_changed": 29,
+    "insertions": 1241,
+    "deletions": 46
+  }
 }
