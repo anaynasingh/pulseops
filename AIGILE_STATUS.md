@@ -8,7 +8,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 **Active burst:** intake-functional
 **Burst base:** 7dae53f2de15f721913344c3df07b66bd295ddaf
 **Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run probe retrospective then /ag-ship to ship intake-functional. Steer: accept (C1/C2 fixed+confirmed, C3 deferred). Live pytest/UI/API deferred to the Railway dev deploy — exercise the 48 tests + manual UI before the dev->main PR.
+**Next action:** Run /ag-ship to ship intake-functional. Steer: accept (C1/C2 fixed+confirmed, C3 deferred). Retrospective done: 2 corrections promoted (atomic-claim, live-test-isolation), 1 capability added, HAV scored. Live pytest/UI/API deferred to the Railway dev deploy — exercise the 48 tests + manual UI before the dev->main PR.
 **Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
