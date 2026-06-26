@@ -38,6 +38,8 @@ Methodology fixes and other work not in the phased plan above. Each cites its tr
      description. Trigger: (closed burst | CORRECTIONS rule | CHARTER
      update). -->
 
+- [2026-06-26] intake-functional — made the AI Intake confirm flow functional: classify project-vs-task + route to new/existing project, create real Task rows, log activity, fix board-refresh. Advances CHARTER O3. Trigger: user bug report (intake generated items but did nothing). Shipped prod 63a8b48 (PR #8).
+
 ## Pending decisions (not blocking active sequence)
 
 <!-- Items that should reach a decision before they become blockers. -->
