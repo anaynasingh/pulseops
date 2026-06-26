@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Building
+**Phase:** Steering
 **Active burst:** guide-modal-center
 **Burst base:** ec8a597a86b10d31ef6076ce5496d19afc1bc438
 **Burst base accepted dirty:** yes - untracked .aigile/retros/ is AI-gile retrospective infra unrelated to the guide-modal-center frontend fix; will not be staged in the burst commit
 **Plan reference:** AIGILE_PLAN/current/
-**Next action:** Build: portal ClaudeSetupModal via createPortal(document.body) so the sidebar-triggered "guide" modal centers on the viewport instead of being clamped to the transformed sidebar pane.
+**Next action:** Await steer decision on guide-modal-center.
 **Last updated:** 2026-06-26 (guide-modal-center burst opened)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -58,6 +58,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - Codex adversarial-review: review-mqunqa66-vawfmc (status: resolved — C1 race + C2 test-pollution fixed, 2026-06-26)
 - Codex adversarial-review: review-mquo3tdl-a0821i (status: resolved — C1/C2 confirmed fixed; C3 progress_pct deferred to DEFERRED.md, 2026-06-26)
 - Codex adversarial-review: thread 019f0358-27f9-7c70-a84b-947909a94919 (intake-default-assignee, base 33f8c43; status: resolved — verdict APPROVE, no material findings, 2026-06-26)
+- Codex adversarial-review: job b94iarwq1 (guide-modal-center, base ec8a597, branch mode; status: in-flight at steer)
 ## Session Checkpoint
 
 <!-- Written by /ag-compact before context compaction. -->
