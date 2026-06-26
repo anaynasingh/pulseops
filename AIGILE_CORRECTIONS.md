@@ -14,10 +14,18 @@
 <!-- `Builder: legacy` if it surfaces at retrospective with no Builder    -->
 <!-- line. `legacy` is excluded from per-builder routing analytics.       -->
 <!--                                                                     -->
+<!-- Every entry header MUST begin with `- ` or `PENDING:`. Bare          -->
+<!-- `[YYYY-MM-DD]` headers are silently dropped by corrections_parser.   -->
+<!--                                                                     -->
 <!-- Never pre-populate. Entries earn their place through real errors.    -->
 <!-- When promoting a correction from repo-specific to global, copy the   -->
 <!-- entry to ~/.claude/aigile-canonical/global/AIGILE_CORRECTIONS.md -->
 <!-- and note the promotion date here.                                    -->
+<!--                                                                     -->
+<!-- When an entry is superseded by a structural fix, move it to         -->
+<!-- AIGILE_CORRECTIONS_ARCHIVE.md (create alongside this file) and add  -->
+<!-- an **Absorbed:** line explaining the structural fix. Archive keeps   -->
+<!-- the audit trail without loading stale rules into session context.   -->
 
 - [2026-06-25] Tests called "passing" must actually be executed before a burst ships.
          Builder: claude.
