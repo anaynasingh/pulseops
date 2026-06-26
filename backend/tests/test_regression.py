@@ -7,10 +7,13 @@ Run against the live local backend:
 
 Covers: authentication, task CRUD, privacy, project RBAC, chatbot, MCP (skipped).
 """
+import asyncio
+import uuid
+
 import pytest
 import httpx
 
-BASE = "http://localhost:8002/api/v1"
+BASE = "http://localhost:8001/api/v1"
 CLIENT = httpx.Client(timeout=30.0)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -321,3 +324,192 @@ class TestMCPTools:
 
     def test_complete_task_via_mcp(self):
         pass
+
+
+# ── 9. AI Intake confirm — project/task routing (Option C) ───────────────────
+#
+# These tests exercise the confirm endpoint deterministically by seeding
+# `pending` RequestIntake rows DIRECTLY in the DB (no live AI call), so subtask
+# count / item_type / status are fixed. Seeded intakes and any projects they
+# create are cleaned up in the fixture teardown so repeated runs stay isolated
+# and "no spurious project" assertions do not go flaky.
+
+def _run(coro):
+    return asyncio.new_event_loop().run_until_complete(coro)
+
+
+async def _seed_intake_async(item_type, subtasks, title):
+    from app.db.session import AsyncSessionLocal
+    from app.models.models import RequestIntake, IntakeStatus, PriorityLevel
+    intake_id = uuid.uuid4()
+    async with AsyncSessionLocal() as db:
+        db.add(RequestIntake(
+            id=intake_id,
+            raw_input="seeded for regression test",
+            generated_title=title,
+            generated_description="seeded description",
+            project_type="test",
+            suggested_item_type=item_type,   # may be None to simulate a legacy row
+            suggested_tags=["regression"],
+            suggested_subtasks=subtasks,
+            suggested_next_steps=["first step"],
+            suggested_priority=PriorityLevel.medium,
+            suggested_owners=[],
+            intake_status=IntakeStatus.pending,
+        ))
+        await db.commit()
+    return str(intake_id)
+
+
+async def _cleanup_async(intake_ids):
+    from sqlalchemy import select, delete
+    from app.db.session import AsyncSessionLocal
+    from app.models.models import RequestIntake, Project
+    async with AsyncSessionLocal() as db:
+        for iid in intake_ids:
+            res = await db.execute(select(RequestIntake).where(RequestIntake.id == uuid.UUID(iid)))
+            intake = res.scalar_one_or_none()
+            if intake and intake.project_id:
+                # Deleting the project cascades to its tasks (ondelete=CASCADE).
+                await db.execute(delete(Project).where(Project.id == intake.project_id))
+            await db.execute(delete(RequestIntake).where(RequestIntake.id == uuid.UUID(iid)))
+        await db.commit()
+
+
+@pytest.fixture
+def intake_factory():
+    """Yields a factory for seeded pending intakes; cleans them up afterwards."""
+    created = []
+
+    def make(item_type="project", subtasks=None, title=None):
+        if subtasks is None:
+            subtasks = ["Subtask one", "Subtask two"]
+        title = title or f"_reg_intake_{uuid.uuid4().hex[:8]}"
+        iid = _run(_seed_intake_async(item_type, subtasks, title))
+        created.append(iid)
+        return iid, title
+
+    yield make
+    _run(_cleanup_async(created))
+
+
+def confirm_intake(token, intake_id, body):
+    return CLIENT.post(f"{BASE}/ai/intake/{intake_id}/confirm", json=body, headers=auth(token))
+
+
+class TestIntakeConfirm:
+    def test_project_route_creates_project_and_subtasks(self, anayna_token, intake_factory):
+        iid, title = intake_factory(item_type="project", subtasks=["A", "B", "C"])
+        r = confirm_intake(anayna_token, iid, {"confirmed_priority": "high", "item_type": "project"})
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["item_type"] == "project"
+        assert data["project"]["title"] == title
+        assert data["project"]["status"] == "intake"
+        assert data["tasks_created"] == 3
+        assert {t["title"] for t in data["tasks"]} == {"A", "B", "C"}
+        assert all(t["project_id"] == data["project"]["id"] for t in data["tasks"])
+
+    def test_project_route_empty_subtasks_creates_zero_tasks(self, anayna_token, intake_factory):
+        iid, _ = intake_factory(item_type="project", subtasks=[])
+        r = confirm_intake(anayna_token, iid, {"confirmed_priority": "low", "item_type": "project"})
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["item_type"] == "project"
+        assert data["tasks_created"] == 0
+        assert data["tasks"] == []
+
+    def test_task_to_new_project(self, anayna_token, intake_factory):
+        iid, _ = intake_factory(item_type="task", subtasks=["Do the thing"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium",
+            "item_type": "task",
+            "new_project_title": "_reg_new_parent",
+        })
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["item_type"] == "task"
+        assert data["project"]["title"] == "_reg_new_parent"
+        assert data["tasks_created"] == 1
+        assert data["tasks"][0]["title"] == "Do the thing"
+
+    def test_task_to_new_project_empty_subtasks_creates_single_task(self, anayna_token, intake_factory):
+        iid, title = intake_factory(item_type="task", subtasks=[])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium",
+            "item_type": "task",
+            "new_project_title": "_reg_new_parent2",
+        })
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["tasks_created"] == 1
+        # single task falls back to the generated title
+        assert data["tasks"][0]["title"] == title
+
+    def test_task_to_existing_project(self, anayna_token, anayna_project, intake_factory):
+        iid, _ = intake_factory(item_type="task", subtasks=["X", "Y"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium",
+            "item_type": "task",
+            "target_project_id": anayna_project["id"],
+        })
+        assert r.status_code == 201, r.text
+        data = r.json()
+        assert data["item_type"] == "task"
+        assert data["project"]["id"] == anayna_project["id"]   # no spurious new project
+        assert data["tasks_created"] == 2
+        assert all(t["project_id"] == anayna_project["id"] for t in data["tasks"])
+
+    def test_user_override_wins_over_ai_classification(self, anayna_token, intake_factory):
+        # AI said "project"; user overrides to "task" → routed as task.
+        iid, _ = intake_factory(item_type="project", subtasks=["only one"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium",
+            "item_type": "task",
+            "new_project_title": "_reg_override_parent",
+        })
+        assert r.status_code == 201, r.text
+        assert r.json()["item_type"] == "task"
+
+    def test_legacy_null_classification_defaults_to_project(self, anayna_token, intake_factory):
+        # Row created before the column existed (None) + no override → project.
+        iid, _ = intake_factory(item_type=None, subtasks=["Z"])
+        r = confirm_intake(anayna_token, iid, {"confirmed_priority": "medium"})
+        assert r.status_code == 201, r.text
+        assert r.json()["item_type"] == "project"
+
+    def test_missing_target_project_returns_404(self, anayna_token, intake_factory):
+        iid, _ = intake_factory(item_type="task", subtasks=["t"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium",
+            "item_type": "task",
+            "target_project_id": "00000000-0000-0000-0000-000000000000",
+        })
+        assert r.status_code == 404, r.text
+
+    def test_unauthorized_target_project_returns_403(self, anayna_token, stephen_project, intake_factory):
+        # Anayna cannot add tasks to Stephen's project.
+        iid, _ = intake_factory(item_type="task", subtasks=["t"])
+        r = confirm_intake(anayna_token, iid, {
+            "confirmed_priority": "medium",
+            "item_type": "task",
+            "target_project_id": stephen_project["id"],
+        })
+        assert r.status_code == 403, r.text
+
+    def test_already_confirmed_returns_409(self, anayna_token, intake_factory):
+        iid, _ = intake_factory(item_type="project", subtasks=["A"])
+        r1 = confirm_intake(anayna_token, iid, {"confirmed_priority": "medium", "item_type": "project"})
+        assert r1.status_code == 201, r1.text
+        r2 = confirm_intake(anayna_token, iid, {"confirmed_priority": "medium", "item_type": "project"})
+        assert r2.status_code == 409, r2.text
+
+    def test_confirmed_priority_required(self, anayna_token, intake_factory):
+        iid, _ = intake_factory(item_type="project", subtasks=["A"])
+        r = confirm_intake(anayna_token, iid, {"item_type": "project"})
+        assert r.status_code == 422, r.text
+
+    def test_unauthenticated_confirm_rejected(self, intake_factory):
+        iid, _ = intake_factory(item_type="project", subtasks=["A"])
+        r = CLIENT.post(f"{BASE}/ai/intake/{iid}/confirm", json={"confirmed_priority": "medium"})
+        assert r.status_code == 401

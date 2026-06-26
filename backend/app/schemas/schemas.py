@@ -3,7 +3,7 @@ PulseOps — Pydantic v2 Schemas (request/response models)
 """
 from __future__ import annotations
 from datetime import datetime, date
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Literal
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 from app.models.models import (
@@ -349,6 +349,18 @@ class IntakeConfirmRequest(BaseModel):
     description: Optional[str] = None
     owner_id: Optional[UUID] = None
     team_id: Optional[UUID] = None
+    # routing: project vs task (Option C). null => resolve from intake.suggested_item_type (itself defaulting to "project")
+    item_type: Optional[Literal["project", "task"]] = None
+    target_project_id: Optional[UUID] = None   # when item_type=="task": attach to this existing project
+    new_project_title: Optional[str] = None    # when item_type=="task" and no target_project_id: create this parent project
+
+
+class ConfirmIntakeResult(BaseModel):
+    """Result of confirming an intake — tells the frontend what was created and where."""
+    item_type: Literal["project", "task"]
+    project: "ProjectOut"           # the project the items live under (new or existing)
+    tasks_created: int
+    tasks: List["TaskOut"] = []     # the Task rows created (subtasks or the task(s))
 
 
 class IntakeOut(BaseModel):
@@ -357,6 +369,7 @@ class IntakeOut(BaseModel):
     generated_title: Optional[str] = None
     generated_description: Optional[str] = None
     project_type: Optional[str] = None
+    suggested_item_type: Optional[str] = None
     suggested_tags: List[str]
     suggested_subtasks: Any
     suggested_next_steps: List[str]
@@ -535,3 +548,4 @@ class TaskBalanceResponse(BaseModel):
 # Allow forward references
 ProjectOut.model_rebuild()
 CommentOut.model_rebuild()
+ConfirmIntakeResult.model_rebuild()

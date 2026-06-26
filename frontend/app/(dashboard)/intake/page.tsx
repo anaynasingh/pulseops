@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { aiApi } from "@/lib/api";
+import { aiApi, projectsApi } from "@/lib/api";
 import { Header } from "@/components/layout/Header";
 import { cn } from "@/lib/utils";
-import type { IntakeResult, PriorityLevel } from "@/lib/types";
+import type { IntakeResult, PriorityLevel, Project } from "@/lib/types";
 import { PRIORITY_CONFIG } from "@/lib/types";
 
 const PRIORITY_OPTIONS: PriorityLevel[] = ["low", "medium", "high", "urgent"];
+
+type ItemType = "project" | "task";
+type ProjectMode = "existing" | "new";
 
 export default function IntakePage() {
   const router = useRouter();
@@ -19,21 +22,64 @@ export default function IntakePage() {
   const [confirmedPriority, setConfirmedPriority] = useState<PriorityLevel | null>(null);
   const [confirming, setConfirming] = useState(false);
 
+  // Routing state (Option C): is this a project or a task, and where does a task go?
+  const [itemType, setItemType] = useState<ItemType>("project");
+  const [projectMode, setProjectMode] = useState<ProjectMode>("existing");
+  const [targetProjectId, setTargetProjectId] = useState("");
+  const [newProjectTitle, setNewProjectTitle] = useState("");
+
+  // Existing projects for the task→existing picker. Only fetched when needed.
+  const {
+    data: projects = [],
+    isLoading: projectsLoading,
+    isError: projectsError,
+  } = useQuery<Project[]>({
+    queryKey: ["projects"],
+    queryFn: () => projectsApi.list({ limit: 200 }),
+    enabled: itemType === "task" && projectMode === "existing",
+  });
+
+  const resetRouting = (data?: IntakeResult | null) => {
+    setItemType(data?.suggested_item_type ?? "project");
+    setProjectMode("existing");
+    setTargetProjectId("");
+    setNewProjectTitle(data?.generated_title ?? "");
+  };
+
   const analyzeMutation = useMutation({
     mutationFn: (input: string) => aiApi.intake(input),
     onSuccess: (data: IntakeResult) => {
       setResult(data);
       setConfirmedPriority(data.suggested_priority ?? "medium");
+      resetRouting(data);
     },
   });
 
   const confirmMutation = useMutation({
-    mutationFn: () =>
-      aiApi.confirmIntake(result!.id, {
+    mutationFn: () => {
+      const body: Record<string, unknown> = {
         confirmed_priority: confirmedPriority,
-      }),
+        item_type: itemType,
+      };
+      if (itemType === "task") {
+        if (projectMode === "existing") {
+          body.target_project_id = targetProjectId;
+        } else {
+          body.new_project_title = newProjectTitle || result?.generated_title;
+        }
+      }
+      return aiApi.confirmIntake(result!.id, body);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      // The board uses ["projects-kanban", ...] and the dashboard uses
+      // ["dashboard"] / ["my-dashboard"] — invalidate all so the new
+      // project/tasks and activity appear without a manual reload.
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          ["projects", "projects-kanban", "dashboard", "my-dashboard"].includes(
+            q.queryKey[0] as string
+          ),
+      });
       router.push("/board");
     },
   });
@@ -49,6 +95,30 @@ export default function IntakePage() {
     setConfirming(true);
     confirmMutation.mutate();
   };
+
+  const handleDiscard = () => {
+    setResult(null);
+    setRawInput("");
+    resetRouting(null);
+  };
+
+  // Dynamic button label + gating (no more hardcoded "Create Project").
+  const selectedProject = projects.find((p) => p.id === targetProjectId);
+  const taskExistingNeedsProject =
+    itemType === "task" && projectMode === "existing" && !targetProjectId;
+
+  const confirmLabel =
+    itemType === "project"
+      ? "✓ Create Project"
+      : projectMode === "existing"
+      ? `✓ Add to ${selectedProject?.title ?? "project"}`
+      : "✓ Create Project + Task(s)";
+  const pendingLabel =
+    itemType === "project"
+      ? "Creating project…"
+      : projectMode === "existing"
+      ? "Adding tasks…"
+      : "Creating…";
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -139,7 +209,9 @@ export default function IntakePage() {
               {/* Suggested subtasks */}
               {result.suggested_subtasks?.length > 0 && (
                 <div>
-                  <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Suggested Subtasks</p>
+                  <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">
+                    {itemType === "task" ? "Task(s) to create" : "Suggested Subtasks"}
+                  </p>
                   <ul className="space-y-1.5">
                     {(Array.isArray(result.suggested_subtasks) ? result.suggested_subtasks : []).map((task: string, i: number) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
@@ -160,6 +232,104 @@ export default function IntakePage() {
               )}
 
               {/* ═══════════════════════════════════════════════════════════
+                  WHAT TO CREATE — project vs task routing (Option C).
+                  AI suggests a type; the human can override and choose where
+                  a task lands (existing project or a new one).
+              ═══════════════════════════════════════════════════════════ */}
+              <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-white">What should this become?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["project", "task"] as ItemType[]).map((t) => {
+                    const isSelected = itemType === t;
+                    const isSuggested = result.suggested_item_type === t;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setItemType(t)}
+                        className={cn(
+                          "py-2 px-3 rounded-lg border text-xs font-medium transition-smooth",
+                          isSelected
+                            ? "bg-indigo-900/40 text-indigo-300 border-indigo-600"
+                            : "border-slate-700 text-slate-500 hover:border-slate-600"
+                        )}
+                      >
+                        {t === "project" ? "Project" : "Task"}
+                        {isSuggested && !isSelected && (
+                          <span className="block text-[9px] text-slate-600 mt-0.5">AI suggests</span>
+                        )}
+                        {isSelected && (
+                          <span className="block text-[9px] mt-0.5 opacity-80">Selected ✓</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {itemType === "task" && (
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setProjectMode("existing")}
+                        className={cn(
+                          "py-2 px-3 rounded-lg border text-xs font-medium transition-smooth",
+                          projectMode === "existing"
+                            ? "bg-slate-800 text-white border-slate-500"
+                            : "border-slate-700 text-slate-500 hover:border-slate-600"
+                        )}
+                      >
+                        Add to existing project
+                      </button>
+                      <button
+                        onClick={() => setProjectMode("new")}
+                        className={cn(
+                          "py-2 px-3 rounded-lg border text-xs font-medium transition-smooth",
+                          projectMode === "new"
+                            ? "bg-slate-800 text-white border-slate-500"
+                            : "border-slate-700 text-slate-500 hover:border-slate-600"
+                        )}
+                      >
+                        Create new project
+                      </button>
+                    </div>
+
+                    {projectMode === "existing" ? (
+                      <div>
+                        <select
+                          value={targetProjectId}
+                          onChange={(e) => setTargetProjectId(e.target.value)}
+                          disabled={projectsLoading || projectsError}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        >
+                          <option value="">
+                            {projectsLoading
+                              ? "Loading projects…"
+                              : projectsError
+                              ? "Could not load projects"
+                              : "Select a project…"}
+                          </option>
+                          {projects.map((p) => (
+                            <option key={p.id} value={p.id}>{p.title}</option>
+                          ))}
+                        </select>
+                        {projectsError && (
+                          <p className="text-[11px] text-red-400 mt-1">
+                            Failed to load projects. Switch to &ldquo;Create new project&rdquo; or retry.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        value={newProjectTitle}
+                        onChange={(e) => setNewProjectTitle(e.target.value)}
+                        placeholder="New project title"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ═══════════════════════════════════════════════════════════
                   HUMAN PRIORITY CONFIRMATION — CRITICAL UX REQUIREMENT
                   AI never auto-sets priority. User MUST confirm.
               ═══════════════════════════════════════════════════════════ */}
@@ -177,7 +347,7 @@ export default function IntakePage() {
                   <span className={cn("font-semibold", PRIORITY_CONFIG[result.suggested_priority ?? "medium"].color)}>
                     {result.suggested_priority?.toUpperCase() ?? "MEDIUM"}
                   </span>
-                  . You must confirm or adjust before creating the project.
+                  . You must confirm or adjust before creating.
                 </p>
 
                 <div className="grid grid-cols-4 gap-2">
@@ -213,13 +383,13 @@ export default function IntakePage() {
               <div className="flex items-center gap-3 pt-2">
                 <button
                   onClick={handleConfirm}
-                  disabled={!confirmedPriority || confirmMutation.isPending}
+                  disabled={!confirmedPriority || confirmMutation.isPending || taskExistingNeedsProject}
                   className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium text-sm rounded-lg transition-colors"
                 >
-                  {confirmMutation.isPending ? "Creating project…" : "✓ Create Project"}
+                  {confirmMutation.isPending ? pendingLabel : confirmLabel}
                 </button>
                 <button
-                  onClick={() => { setResult(null); setRawInput(""); }}
+                  onClick={handleDiscard}
                   className="px-4 py-2.5 border border-slate-700 text-slate-400 hover:text-white text-sm rounded-lg transition-colors"
                 >
                   Discard

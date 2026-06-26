@@ -87,6 +87,8 @@ export const aiApi = {
     api.post("/ai/chat", { message, project_id, history }).then((r) => r.data),
   intake: (raw_input: string, team_id?: string) =>
     api.post("/ai/intake", { raw_input, team_id }).then((r) => r.data),
+  // data: { confirmed_priority, item_type?, target_project_id?, new_project_title?, title?, description?, owner_id?, team_id? }
+  // returns ConfirmIntakeResult { item_type, project, tasks_created, tasks }
   confirmIntake: (intake_id: string, data: Record<string, unknown>) =>
     api.post(`/ai/intake/${intake_id}/confirm`, data).then((r) => r.data),
   extractEmail: (data: Record<string, unknown>) =>
