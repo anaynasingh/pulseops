@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Building
+**Phase:** Promoting
 **Active burst:** intake-default-assignee
 **Burst base:** 33f8c4339a147f1ef45ddce148c10d821b805151
 **Plan reference:** AIGILE_PLAN/current/
-**Next action:** Build: backend-intake-default-assignment — add `assigned_to` to IntakeConfirmRequest (schemas.py); resolve owner/assignee via model_fields_set in confirm_intake and apply to Project Routes 1+3 and the task loop (ai.py); extend TestIntakeConfirm with the C1/C2/C3 cases (test_regression.py). Then /ag-probe.
+**Next action:** Run /ag-ship to ship intake-default-assignee. Live suite (24 IntakeConfirm tests) + API check deferred to deploy per steer decision.
 **Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -36,7 +36,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 **Stream backend-intake-default-assignment builders:** claude
 **Stream backend-intake-default-assignment handoff head:** None
-**Stream backend-intake-default-assignment status:** IN PROGRESS
+**Stream backend-intake-default-assignment status:** COMPLETE
 
 ## Gemini Reviews
 
@@ -56,6 +56,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 - Codex adversarial-review: review-mqunqa66-vawfmc (status: resolved — C1 race + C2 test-pollution fixed, 2026-06-26)
 - Codex adversarial-review: review-mquo3tdl-a0821i (status: resolved — C1/C2 confirmed fixed; C3 progress_pct deferred to DEFERRED.md, 2026-06-26)
+- Codex adversarial-review: thread 019f0358-27f9-7c70-a84b-947909a94919 (intake-default-assignee, base 33f8c43; status: resolved — verdict APPROVE, no material findings, 2026-06-26)
 ## Session Checkpoint
 
 <!-- Written by /ag-compact before context compaction. -->
@@ -76,3 +77,4 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - [2026-06-25] remove-my-tasks — dropped redundant dashboard My Tasks list + deleted component. PASS. Shipped prod db4bacd (PR #5).
 - [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed; ship Gemini: week-window + style). Shipped prod 2812192 (PR #6).
 - [2026-06-26] intake-functional — AI intake routes to project/task (user override + parent picker); confirm creates real Task rows, logs activity, busts kanban cache; fixed board-never-refreshes query-key bug. PASS (static+Codex; live deferred to prod deploy. Codex: C1 race + C2 test fixed, C3 progress_pct deferred; Gemini: 1 MEDIUM fixed). Shipped prod 63a8b48 (PR #8).
+- [2026-06-26] intake-default-assignee — intake confirm defaults new project owner_id + created task assigned_to to the confirming user (model_fields_set omit-vs-null; explicit override/null preserved; Route 2 existing owner untouched). PASS (static + Codex APPROVE 0 findings; live 24-test suite + API deferred to deploy per steer).

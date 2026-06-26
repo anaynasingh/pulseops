@@ -56,3 +56,8 @@
          Builder: claude.
          Why: intake-functional test_regression.py runs against a persistent shared dev backend. _cleanup_async deleted the project at intake.project_id unconditionally; for the task->existing test that id was the real anayna_project, so teardown would cascade-delete real data. Separately, task cleanup ran only after assertions, so an assertion failure leaked real rows (Codex C2/N3, opus self-review).
          How to apply: for live-backend (non-fixture-DB) suites, create disposable entities the test owns (unique "_reg"-style title marker), wrap mutations in try/finally so teardown runs even on assertion failure, gate any DELETE on the test marker so a real fixture can never be removed, and never assert "no spurious X" against shared global lists without marker-scoped filtering.
+
+PENDING: [2026-06-26] When ag-init preflight hard-blocks with a parser-contract / header-drift notice that never clears, hand-sync the AIGILE_CORRECTIONS.md header to the canonical template.
+         Builder: n/a.
+         Why: ag-init's header drift detector flags a missing parser-contract notice, but migrate_corrections_header no-ops when the Builder marker is already present, so drift never clears and .aigile/last-init is never written. Preflight then hard-blocks every burst at session start (the intake-default-assignee plan was blocked this way).
+         How to apply: if preflight loops on a CORRECTIONS header-drift / parser-contract notice, manually update the AIGILE_CORRECTIONS.md header block to match the canonical template so the detector clears and last-init is written. Root cause is an upstream canonical bug — file /ag-upstream to fix migrate_corrections_header; remove this entry once the canonical fix lands.
