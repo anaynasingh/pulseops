@@ -370,8 +370,14 @@ async def _cleanup_async(intake_ids):
             res = await db.execute(select(RequestIntake).where(RequestIntake.id == uuid.UUID(iid)))
             intake = res.scalar_one_or_none()
             if intake and intake.project_id:
-                # Deleting the project cascades to its tasks (ondelete=CASCADE).
-                await db.execute(delete(Project).where(Project.id == intake.project_id))
+                # Only delete projects WE created (test marker prefix). Never delete a
+                # real/existing project the task→existing route attached tasks to.
+                proj = (await db.execute(
+                    select(Project).where(Project.id == intake.project_id)
+                )).scalar_one_or_none()
+                if proj and (proj.title or "").startswith("_reg"):
+                    # Deleting our test project cascades to its tasks (ondelete=CASCADE).
+                    await db.execute(delete(Project).where(Project.id == proj.id))
             await db.execute(delete(RequestIntake).where(RequestIntake.id == uuid.UUID(iid)))
         await db.commit()
 
@@ -459,6 +465,10 @@ class TestIntakeConfirm:
         assert data["project"]["id"] == anayna_project["id"]   # no spurious new project
         assert data["tasks_created"] == 2
         assert all(t["project_id"] == anayna_project["id"] for t in data["tasks"])
+        # Clean up the tasks we added to the (real) existing project — the fixture
+        # teardown deliberately will NOT delete a non-test project.
+        for t in data["tasks"]:
+            delete_task(anayna_token, t["id"])
 
     def test_user_override_wins_over_ai_classification(self, anayna_token, intake_factory):
         # AI said "project"; user overrides to "task" → routed as task.
