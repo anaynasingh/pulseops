@@ -13,6 +13,13 @@ interface ClaudeSetupModalProps {
 
 const BACKEND = "https://backend-production-ff8e.up.railway.app";
 
+// Stable references for useSyncExternalStore, defined once at module scope so
+// React does not re-subscribe on every render (inline fns change identity each
+// render). getServerSnapshot returns false (SSR → null), getSnapshot true (client).
+const emptySubscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 const STEP_DEFS = [
   {
     id: 1,
@@ -172,7 +179,7 @@ export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalP
   // Idiomatic React 18 client-only detection: getServerSnapshot returns false
   // (server render → null), getSnapshot returns true (client render → portal).
   // Hydration-safe by construction and lint-clean (no setState-in-effect).
-  const isClient = useSyncExternalStore(() => () => {}, () => true, () => false);
+  const isClient = useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot);
 
   const handleDone = async () => {
     setSaving(true);
