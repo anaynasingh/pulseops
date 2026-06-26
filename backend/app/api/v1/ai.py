@@ -255,7 +255,7 @@ async def confirm_intake(
                 # Route 3: new minimal parent project (override survival per plan).
                 project = Project(
                     title=payload.new_project_title or intake.generated_title or "Untitled Project",
-                    description=intake.generated_description,
+                    description=payload.description or intake.generated_description,
                     status=ProjectStatus.intake,
                     priority=payload.confirmed_priority,
                     owner_id=payload.owner_id,
