@@ -108,6 +108,9 @@ Your job is to analyze a raw project/task request and extract structured informa
 Rules:
 - Generate a clear, professional title (max 10 words)
 - Write a concise description (2-4 sentences) explaining what needs to be done and why
+- Classify the request as a "project" or a "task". Set suggested_item_type to EXACTLY one of: "project", "task".
+  Use "project" when the request describes substantial, multi-step work that warrants its own board column and subtasks.
+  Use "task" when the request is a single, self-contained piece of work that belongs under an existing or new project.
 - Suggest realistic tags (3-6 tags, lowercase, hyphenated)
 - Suggest 3-5 concrete subtasks as plain strings
 - Suggest 2-4 immediate next steps as plain strings

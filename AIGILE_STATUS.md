@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Plan reference:** None
-**Next action:** Burst complete — assistant-task-prompts shipped to prod (PR #6, 2812192) and auto-deployed; dev back-synced; burst archived to closed/. Ready for next burst.
-**Last updated:** 2026-06-25
+**Phase:** Promoting
+**Active burst:** intake-functional
+**Burst base:** 7dae53f2de15f721913344c3df07b66bd295ddaf
+**Plan reference:** AIGILE_PLAN/current/
+**Next action:** Run /ag-ship to ship intake-functional. Steer: accept (C1/C2 fixed+confirmed, C3 deferred). Retrospective done: 2 corrections promoted (atomic-claim, live-test-isolation), 1 capability added, HAV scored. Live pytest/UI/API deferred to the Railway dev deploy — exercise the 48 tests + manual UI before the dev->main PR.
+**Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -34,9 +34,17 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-<!-- No active streams. -->
+**Stream A (backend) builders:** claude
+**Stream A (backend) handoff head:** 3bd9aa3
+**Stream A (backend) status:** COMPLETE
+
+**Stream B (frontend) builders:** claude
+**Stream B (frontend) handoff head:** b4b0afc
+**Stream B (frontend) status:** COMPLETE
 
 ## Gemini Reviews
+
+**PR #8:** WAITING_RESPONSE | reviewed 2026-06-26 | findings: 1 MEDIUM (Route 3 payload.description) — FIXED in 9228042, thread resolved | repo: P33-AI (dev->master, intake-functional)
 
 <!-- Populated by /ag-ship when a dev->main PR is opened. -->
 <!-- Two states: WAITING_REVIEW (not yet reviewed) and WAITING_RESPONSE (reviewed, findings pending). -->
@@ -52,6 +60,8 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 <!-- Cleared by /ag-probe steer checkpoint when addressed or explicitly dismissed. -->
 <!-- Format: - PR #N: [comment summary] — deferred [date] -->
 
+- Codex adversarial-review: review-mqunqa66-vawfmc (status: resolved — C1 race + C2 test-pollution fixed, 2026-06-26)
+- Codex adversarial-review: review-mquo3tdl-a0821i (status: resolved — C1/C2 confirmed fixed; C3 progress_pct deferred to DEFERRED.md, 2026-06-26)
 ## Session Checkpoint
 
 <!-- Written by /ag-compact before context compaction. -->
@@ -71,3 +81,4 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - [2026-06-25] reminder-modal — "Focus Check" title + prefetch/skeleton (no empty flash). PASS. Shipped prod 7180bed (PR #4).
 - [2026-06-25] remove-my-tasks — dropped redundant dashboard My Tasks list + deleted component. PASS. Shipped prod db4bacd (PR #5).
 - [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed; ship Gemini: week-window + style). Shipped prod 2812192 (PR #6).
+- [2026-06-26] intake-functional — AI intake routes to project/task (user override + parent picker); confirm creates real Task rows, logs activity, busts kanban cache; fixed board-never-refreshes query-key bug. PASS (static+Codex; live deferred to dev deploy. Codex: C1 race + C2 test fixed, C3 progress_pct deferred). Not yet shipped.

@@ -275,6 +275,7 @@ class RequestIntake(Base):
     generated_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     generated_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     project_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    suggested_item_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # "project" | "task" (AI classification)
     suggested_tags: Mapped[List[str]] = mapped_column(ARRAY(String), default=list)
     suggested_subtasks: Mapped[list] = mapped_column(JSONB, default=list)
     suggested_next_steps: Mapped[List[str]] = mapped_column(ARRAY(String), default=list)

@@ -4,7 +4,7 @@ All AI-powered analysis, extraction, and generation endpoints.
 """
 from datetime import date, timedelta
 from uuid import UUID
-from typing import List, Optional
+from typing import List, Optional, Literal
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -17,7 +17,7 @@ from app.models.models import (
 import logging
 logger = logging.getLogger(__name__)
 from app.schemas.schemas import (
-    IntakeRequest, IntakeResult, IntakeOut, IntakeConfirmRequest,
+    IntakeRequest, IntakeResult, IntakeOut, IntakeConfirmRequest, ConfirmIntakeResult,
     EmailAnalysisRequest, EmailAnalysisResult, EmailIngestionOut,
     TranscriptAnalysisRequest, TranscriptAnalysisResult, TranscriptOut,
     SummaryRequest, SummaryOut,
@@ -25,7 +25,9 @@ from app.schemas.schemas import (
     ProjectOut, AIInsightOut, TaskOut,
     PriorityLevel, ProjectStatus
 )
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_writer
+from app.api.v1.projects import _log_activity as _log_project_activity, _can_edit_project, _kanban_cache
+from app.api.v1.tasks import _log_activity as _log_task_activity
 from app.services.ai_service import (
     structured_completion, chat_completion,
     INTAKE_SYSTEM, EMAIL_SYSTEM, TRANSCRIPT_SYSTEM,
@@ -33,7 +35,7 @@ from app.services.ai_service import (
 )
 from app.services.embedding import embed_and_store, embed_and_store_bg
 from app.services.user_service import find_or_create_user_by_name
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -44,6 +46,8 @@ class _IntakeAIOutput(BaseModel):
     title: str
     description: str
     project_type: str
+    # AI classification: "project" or "task". Default covers omitted; validator coerces bad provided values.
+    suggested_item_type: Literal["project", "task"] = "project"
     suggested_tags: List[str]
     suggested_subtasks: List[str]
     suggested_next_steps: List[str]
@@ -52,6 +56,15 @@ class _IntakeAIOutput(BaseModel):
     suggested_owners: List[str]
     suggested_stakeholders: List[str]
     ai_reasoning: str
+
+    @field_validator("suggested_item_type", mode="before")
+    @classmethod
+    def _coerce_item_type(cls, v):
+        # Coerce any unknown/blank value the model emits to the safe default "project".
+        # (Missing values fall back to the field default and never reach this validator.)
+        if isinstance(v, str) and v.strip().lower() in ("project", "task"):
+            return v.strip().lower()
+        return "project"
 
 
 class _EmailAIOutput(BaseModel):
@@ -143,6 +156,7 @@ Generate structured project information from this request.
         generated_title=ai_output.title,
         generated_description=ai_output.description,
         project_type=ai_output.project_type,
+        suggested_item_type=ai_output.suggested_item_type,
         suggested_tags=ai_output.suggested_tags,
         suggested_subtasks=ai_output.suggested_subtasks,
         suggested_next_steps=ai_output.suggested_next_steps,
@@ -168,40 +182,110 @@ Generate structured project information from this request.
     return IntakeOut.model_validate(intake)
 
 
-@router.post("/intake/{intake_id}/confirm", response_model=ProjectOut, status_code=201)
+@router.post("/intake/{intake_id}/confirm", response_model=ConfirmIntakeResult, status_code=201)
 async def confirm_intake(
     intake_id: UUID,
     payload: IntakeConfirmRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_writer),
 ):
     """
-    Human confirms (or adjusts) the AI-suggested intake and creates a real project.
+    Human confirms (or adjusts) the AI-suggested intake and creates real work items.
+
+    The intake is classified as a project or a task (Option C). The confirm routes to:
+      - a new project (+ its suggested subtasks as Task rows), or
+      - one or more tasks added to an existing project (with edit-permission check), or
+      - one or more tasks added to a freshly-created parent project.
     The confirmed_priority field is REQUIRED — ensuring human sign-off.
     """
     from datetime import datetime as dt
     try:
-        intake_res = await db.execute(select(RequestIntake).where(RequestIntake.id == intake_id))
+        # Atomically claim the intake: FOR UPDATE serializes concurrent confirms for the
+        # same intake_id. The first request holds the row lock until commit; a second
+        # concurrent request blocks, then re-reads intake_status=confirmed and 409s —
+        # preventing duplicate project/task fanout (TOCTOU race).
+        intake_res = await db.execute(
+            select(RequestIntake).where(RequestIntake.id == intake_id).with_for_update()
+        )
         intake = intake_res.scalar_one_or_none()
         if not intake:
             raise HTTPException(status_code=404, detail="Intake not found")
         if intake.intake_status != IntakeStatus.pending:
             raise HTTPException(status_code=409, detail="Intake already processed")
 
-        project = Project(
-            title=payload.title or intake.generated_title or "Untitled Project",
-            description=payload.description or intake.generated_description,
-            status=ProjectStatus.intake,
-            priority=payload.confirmed_priority,  # ← Human-confirmed priority
-            owner_id=payload.owner_id,
-            team_id=payload.team_id,
-            tags=intake.suggested_tags or [],
-            due_date=intake.suggested_due_date,
-            next_action=(intake.suggested_next_steps or [])[0] if intake.suggested_next_steps else None,
-            created_by=current_user.id,
-        )
-        db.add(project)
-        await db.flush()
+        # Resolve item type: request override wins; else intake's AI classification;
+        # null/legacy rows (created before the column existed) default to "project".
+        intake_type = intake.suggested_item_type if intake.suggested_item_type in ("project", "task") else "project"
+        resolved_type = payload.item_type or intake_type
+
+        # Clean subtask titles (JSONB list — guard against non-strings/blanks).
+        subtask_titles = [s.strip() for s in (intake.suggested_subtasks or []) if isinstance(s, str) and s.strip()]
+
+        created_tasks: List[Task] = []
+
+        if resolved_type == "project":
+            # ── Route 1: new project + its subtasks as Task rows ──
+            project = Project(
+                title=payload.title or intake.generated_title or "Untitled Project",
+                description=payload.description or intake.generated_description,
+                status=ProjectStatus.intake,
+                priority=payload.confirmed_priority,  # ← Human-confirmed priority
+                owner_id=payload.owner_id,
+                team_id=payload.team_id,
+                tags=intake.suggested_tags or [],
+                due_date=intake.suggested_due_date,
+                next_action=(intake.suggested_next_steps or [])[0] if intake.suggested_next_steps else None,
+                created_by=current_user.id,
+            )
+            db.add(project)
+            await db.flush()
+            await _log_project_activity(db, project.id, current_user.id, "created")
+            task_titles = subtask_titles  # may be empty → zero tasks
+        else:
+            # ── Route 2/3: task(s) under an existing or new parent project ──
+            if payload.target_project_id is not None:
+                # Route 2: existing project — must exist and be editable by this user.
+                proj_res = await db.execute(select(Project).where(Project.id == payload.target_project_id))
+                project = proj_res.scalar_one_or_none()
+                if not project:
+                    raise HTTPException(status_code=404, detail="Target project not found")
+                if not _can_edit_project(project, current_user):
+                    raise HTTPException(status_code=403, detail="You do not have permission to add tasks to this project")
+            else:
+                # Route 3: new minimal parent project (override survival per plan).
+                project = Project(
+                    title=payload.new_project_title or intake.generated_title or "Untitled Project",
+                    description=payload.description or intake.generated_description,
+                    status=ProjectStatus.intake,
+                    priority=payload.confirmed_priority,
+                    owner_id=payload.owner_id,
+                    team_id=payload.team_id,
+                    tags=intake.suggested_tags or [],
+                    due_date=intake.suggested_due_date,
+                    next_action=(intake.suggested_next_steps or [])[0] if intake.suggested_next_steps else None,
+                    created_by=current_user.id,
+                )
+                db.add(project)
+                await db.flush()
+                await _log_project_activity(db, project.id, current_user.id, "created")
+            # A task intake with no subtasks becomes a single task from the generated title.
+            task_titles = subtask_titles or [intake.generated_title or "Untitled Task"]
+
+        for title in task_titles:
+            t = Task(
+                project_id=project.id,
+                title=title,
+                status=ProjectStatus.todo,
+                priority=payload.confirmed_priority,
+                created_by=current_user.id,
+            )
+            db.add(t)
+            created_tasks.append(t)
+
+        if created_tasks:
+            await db.flush()  # populate task ids before logging
+            for t in created_tasks:
+                await _log_task_activity(db, t.id, current_user.id, "task_created", t.title)
 
         intake.intake_status = IntakeStatus.confirmed
         intake.user_confirmed_priority = payload.confirmed_priority
@@ -211,7 +295,7 @@ async def confirm_intake(
 
         await db.commit()
 
-        # Reload with all relationships needed to serialize ProjectOut
+        # Reload the parent project with all relationships needed to serialize ProjectOut.
         proj_res = await db.execute(
             select(Project)
             .options(
@@ -222,7 +306,29 @@ async def confirm_intake(
             )
             .where(Project.id == project.id)
         )
-        return ProjectOut.model_validate(proj_res.scalar_one())
+        project_out = ProjectOut.model_validate(proj_res.scalar_one())
+
+        # Reload created tasks WITH relationships — TaskOut carries assignee + project,
+        # so avoid lazy-load during async serialization (H3).
+        tasks_out: List[TaskOut] = []
+        task_ids = [t.id for t in created_tasks]
+        if task_ids:
+            tres = await db.execute(
+                select(Task)
+                .options(selectinload(Task.assignee), selectinload(Task.project))
+                .where(Task.id.in_(task_ids))
+            )
+            tasks_out = [TaskOut.model_validate(t) for t in tres.scalars().all()]
+
+        # Bust the kanban server-side cache so the new project/tasks surface immediately.
+        _kanban_cache.clear()
+
+        return ConfirmIntakeResult(
+            item_type=resolved_type,
+            project=project_out,
+            tasks_created=len(tasks_out),
+            tasks=tasks_out,
+        )
 
     except HTTPException:
         raise

@@ -124,6 +124,7 @@ export interface IntakeResult {
   generated_title?: string;
   generated_description?: string;
   project_type?: string;
+  suggested_item_type?: "project" | "task";
   suggested_tags: string[];
   suggested_subtasks: string[];
   suggested_next_steps: string[];
@@ -135,6 +136,13 @@ export interface IntakeResult {
   intake_status: IntakeStatus;
   project_id?: string;
   created_at: string;
+}
+
+export interface ConfirmIntakeResult {
+  item_type: "project" | "task";
+  project: Project;
+  tasks_created: number;
+  tasks: Task[];
 }
 
 export interface TranscriptResult {

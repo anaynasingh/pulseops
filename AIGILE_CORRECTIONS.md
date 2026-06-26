@@ -38,3 +38,13 @@
          Builder: n/a.
          Why: local prod/master tracking ref was stale at e774a64; `git log dev..prod/master` showed empty and `git checkout prod/master -- <file>` pulled pre-fix content. `git ls-remote` shows the true remote tip but does not update local tracking refs.
          How to apply: run `git fetch prod` before any divergence comparison or `git checkout <remote>/<branch> -- <file>`.
+
+- [2026-06-26] Any status-gated "create/confirm once" endpoint needs an atomic claim, not check-then-create.
+         Builder: claude.
+         Why: intake-functional confirm_intake read intake_status==pending then ran the project/task create fanout. Two concurrent confirms both passed the check and both created work (duplicate projects/tasks, orphaned rows). The "already confirmed -> 409" plan case only covered sequential re-confirm, not the race. Codex C1 (HIGH).
+         How to apply: when an endpoint transitions a row through a one-shot status gate (pending->confirmed, draft->published, etc.) and then creates dependent rows, claim the row atomically in the same transaction: SELECT ... FOR UPDATE (or a conditional UPDATE ... WHERE status='pending' RETURNING). The loser of the race must see the new status and return 409, not re-run the side effects. At /ag-plan, scan create/confirm endpoints for check-then-act and require the atomic claim in the plan, not as a probe fix.
+
+- [2026-06-26] Live-backend tests that touch real/shared rows must isolate via disposable marked entities + try/finally teardown; never mutate or delete a real fixture.
+         Builder: claude.
+         Why: intake-functional test_regression.py runs against a persistent shared dev backend. _cleanup_async deleted the project at intake.project_id unconditionally; for the task->existing test that id was the real anayna_project, so teardown would cascade-delete real data. Separately, task cleanup ran only after assertions, so an assertion failure leaked real rows (Codex C2/N3, opus self-review).
+         How to apply: for live-backend (non-fixture-DB) suites, create disposable entities the test owns (unique "_reg"-style title marker), wrap mutations in try/finally so teardown runs even on assertion failure, gate any DELETE on the test marker so a real fixture can never be removed, and never assert "no spurious X" against shared global lists without marker-scoped filtering.
