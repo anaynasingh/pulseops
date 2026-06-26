@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Plan reference:** None
-**Next action:** Burst complete — assistant-task-prompts shipped to prod (PR #6, 2812192) and auto-deployed; dev back-synced; burst archived to closed/. Ready for next burst.
-**Last updated:** 2026-06-25
+**Phase:** Building
+**Active burst:** intake-functional
+**Burst base:** 7dae53f2de15f721913344c3df07b66bd295ddaf
+**Plan reference:** AIGILE_PLAN/current/
+**Next action:** Build: Stream A (backend — classification Literal + migration + 8-case confirm_intake router under require_writer + Task creation + activity + cache-bust + ConfirmIntakeResult + seeded tests on 8001) and Stream B (frontend — item-type toggle + project picker + dynamic button + query-key invalidation fix). Build notes: N1 default-for-missing item_type, N2 use "task_created" action, N3 test cleanup/isolation, N4 picker loading state.
+**Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -34,7 +34,13 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-<!-- No active streams. -->
+**Stream A (backend) builders:** claude
+**Stream A (backend) handoff head:** None
+**Stream A (backend) status:** IN PROGRESS
+
+**Stream B (frontend) builders:** claude
+**Stream B (frontend) handoff head:** None
+**Stream B (frontend) status:** IN PROGRESS
 
 ## Gemini Reviews
 
