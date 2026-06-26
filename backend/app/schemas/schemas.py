@@ -347,7 +347,11 @@ class IntakeConfirmRequest(BaseModel):
     # optional overrides
     title: Optional[str] = None
     description: Optional[str] = None
-    owner_id: Optional[UUID] = None
+    # Owner/assignee default to the confirming user when omitted (the user who added
+    # the intake gets the work). An explicit value overrides; an explicit null clears.
+    # confirm_intake distinguishes omitted-vs-explicit-null via model_fields_set.
+    owner_id: Optional[UUID] = None        # new project owner; omitted => confirming user
+    assigned_to: Optional[UUID] = None     # created task assignee; omitted => confirming user
     team_id: Optional[UUID] = None
     # routing: project vs task (Option C). null => resolve from intake.suggested_item_type (itself defaulting to "project")
     item_type: Optional[Literal["project", "task"]] = None
