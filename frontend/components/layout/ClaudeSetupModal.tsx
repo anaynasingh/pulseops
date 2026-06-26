@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
@@ -169,6 +169,11 @@ export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalP
   const current = STEP_DEFS[step];
   const isLast = step === STEP_DEFS.length - 1;
 
+  // Idiomatic React 18 client-only detection: getServerSnapshot returns false
+  // (server render → null), getSnapshot returns true (client render → portal).
+  // Hydration-safe by construction and lint-clean (no setState-in-effect).
+  const isClient = useSyncExternalStore(() => () => {}, () => true, () => false);
+
   const handleDone = async () => {
     setSaving(true);
     try {
@@ -189,10 +194,8 @@ export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalP
     }
   };
 
-  // Client-only: `document` is unavailable during SSR. Both call sites render
-  // this modal post-hydration (sidebar click; layout gated on _hasHydrated),
-  // so this never produces a hydration mismatch.
-  if (typeof document === "undefined") return null;
+  // Render only on the client (portal targets document.body, absent in SSR).
+  if (!isClient) return null;
 
   // Render into document.body so the overlay escapes the sidebar wrapper's
   // CSS transform (layout.tsx), which would otherwise make `fixed` resolve
