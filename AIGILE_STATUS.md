@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Steering
+**Phase:** Promoting
 **Active burst:** intake-functional
 **Burst base:** 7dae53f2de15f721913344c3df07b66bd295ddaf
 **Plan reference:** AIGILE_PLAN/current/
-**Next action:** Await steer decision on intake-functional. Codex adversarial review running (review-mqunqa66-vawfmc). Live pytest/UI/API verification BLOCKED locally (no backend/.env/Supabase) — must run vs a live backend.
+**Next action:** Run probe retrospective then /ag-ship to ship intake-functional. Steer: accept (C1/C2 fixed+confirmed, C3 deferred). Live pytest/UI/API deferred to the Railway dev deploy — exercise the 48 tests + manual UI before the dev->main PR.
 **Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -35,12 +35,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 ## Active streams
 
 **Stream A (backend) builders:** claude
-**Stream A (backend) handoff head:** b4b0afc
-**Stream A (backend) status:** DONE — built, awaiting probe
+**Stream A (backend) handoff head:** 3bd9aa3
+**Stream A (backend) status:** COMPLETE
 
 **Stream B (frontend) builders:** claude
 **Stream B (frontend) handoff head:** b4b0afc
-**Stream B (frontend) status:** DONE — built, awaiting probe
+**Stream B (frontend) status:** COMPLETE
 
 ## Gemini Reviews
 
@@ -79,3 +79,4 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - [2026-06-25] reminder-modal — "Focus Check" title + prefetch/skeleton (no empty flash). PASS. Shipped prod 7180bed (PR #4).
 - [2026-06-25] remove-my-tasks — dropped redundant dashboard My Tasks list + deleted component. PASS. Shipped prod db4bacd (PR #5).
 - [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed; ship Gemini: week-window + style). Shipped prod 2812192 (PR #6).
+- [2026-06-26] intake-functional — AI intake routes to project/task (user override + parent picker); confirm creates real Task rows, logs activity, busts kanban cache; fixed board-never-refreshes query-key bug. PASS (static+Codex; live deferred to dev deploy. Codex: C1 race + C2 test fixed, C3 progress_pct deferred). Not yet shipped.
