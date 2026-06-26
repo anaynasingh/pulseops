@@ -57,6 +57,11 @@
          Why: intake-functional test_regression.py runs against a persistent shared dev backend. _cleanup_async deleted the project at intake.project_id unconditionally; for the task->existing test that id was the real anayna_project, so teardown would cascade-delete real data. Separately, task cleanup ran only after assertions, so an assertion failure leaked real rows (Codex C2/N3, opus self-review).
          How to apply: for live-backend (non-fixture-DB) suites, create disposable entities the test owns (unique "_reg"-style title marker), wrap mutations in try/finally so teardown runs even on assertion failure, gate any DELETE on the test marker so a real fixture can never be removed, and never assert "no spurious X" against shared global lists without marker-scoped filtering.
 
+- [2026-06-26] For client-only portal / SSR-availability guards, use a render-time `typeof document === "undefined"` check, not a useState + useEffect mount flag.
+         Builder: claude.
+         Why: guide-modal-center's createPortal fix used the textbook `useState(false)` + `useEffect(() => setMounted(true), [])` client-mount guard (the plan itself specified it). This repo's eslint config blocks that with react-hooks/set-state-in-effect — a hard error, not a warning — so it failed the frontend lint gate and cost a full Codex round (R1) to fix.
+         How to apply: when gating a component on client-side availability (React portals, window/document access), return null on `if (typeof document === "undefined") return null` at render time, then render. Reserve useEffect for real side effects, never a setState-only mount flag. Safe against hydration mismatch when the component only mounts post-hydration (conditional render behind a click or a hydration flag).
+
 PENDING: [2026-06-26] When ag-init preflight hard-blocks with a parser-contract / header-drift notice that never clears, hand-sync the AIGILE_CORRECTIONS.md header to the canonical template.
          Builder: n/a.
          Why: ag-init's header drift detector flags a missing parser-contract notice, but migrate_corrections_header no-ops when the Builder marker is already present, so drift never clears and .aigile/last-init is never written. Preflight then hard-blocks every burst at session start (the intake-default-assignee plan was blocked this way).
