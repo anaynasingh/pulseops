@@ -58,7 +58,8 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 <!-- Cleared by /ag-probe steer checkpoint when addressed or explicitly dismissed. -->
 <!-- Format: - PR #N: [comment summary] — deferred [date] -->
 
-- Codex adversarial-review: review-mqunqa66-vawfmc (status: pending, 2026-06-26)
+- Codex adversarial-review: review-mqunqa66-vawfmc (status: resolved — C1 race + C2 test-pollution fixed, 2026-06-26)
+- Codex adversarial-review: review-mquo3tdl-a0821i (status: resolved — C1/C2 confirmed fixed; C3 progress_pct deferred to DEFERRED.md, 2026-06-26)
 ## Session Checkpoint
 
 <!-- Written by /ag-compact before context compaction. -->
