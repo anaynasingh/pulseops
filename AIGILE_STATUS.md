@@ -4,11 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Building
+**Phase:** Steering
 **Active burst:** intake-functional
 **Burst base:** 7dae53f2de15f721913344c3df07b66bd295ddaf
 **Plan reference:** AIGILE_PLAN/current/
-**Next action:** Build: Stream A (backend — classification Literal + migration + 8-case confirm_intake router under require_writer + Task creation + activity + cache-bust + ConfirmIntakeResult + seeded tests on 8001) and Stream B (frontend — item-type toggle + project picker + dynamic button + query-key invalidation fix). Build notes: N1 default-for-missing item_type, N2 use "task_created" action, N3 test cleanup/isolation, N4 picker loading state.
+**Next action:** Await steer decision on intake-functional. Codex adversarial review running (review-mqunqa66-vawfmc). Live pytest/UI/API verification BLOCKED locally (no backend/.env/Supabase) — must run vs a live backend.
 **Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -58,6 +58,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 <!-- Cleared by /ag-probe steer checkpoint when addressed or explicitly dismissed. -->
 <!-- Format: - PR #N: [comment summary] — deferred [date] -->
 
+- Codex adversarial-review: review-mqunqa66-vawfmc (status: pending, 2026-06-26)
 ## Session Checkpoint
 
 <!-- Written by /ag-compact before context compaction. -->
