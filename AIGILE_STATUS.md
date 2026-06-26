@@ -4,11 +4,10 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** intake-default-assignee
-**Burst base:** 33f8c4339a147f1ef45ddce148c10d821b805151
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run /ag-ship to ship intake-default-assignee. Live suite (24 IntakeConfirm tests) + API check deferred to deploy per steer decision.
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Next action:** Burst complete — intake-default-assignee shipped to prod (P33-AI master, PR #9, merge 98316eb) and auto-deployed. Live verification (24 IntakeConfirm tests + manual UI) still to run against the prod deploy. /clear when ready; next session runs /ag-plan.
 **Last updated:** 2026-06-26
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -34,9 +33,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream backend-intake-default-assignment builders:** claude
-**Stream backend-intake-default-assignment handoff head:** None
-**Stream backend-intake-default-assignment status:** COMPLETE
+<!-- No active streams. -->
 
 ## Gemini Reviews
 
