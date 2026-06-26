@@ -164,15 +164,10 @@ function Step4Content() {
 export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalProps) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
-  // Portal is created only after mount so it never runs during SSR/first
-  // hydration pass (document is unavailable server-side in the App Router).
-  const [mounted, setMounted] = useState(false);
   const { setAuth, user, token } = useAuthStore();
   const firstName = userName.split(" ")[0];
   const current = STEP_DEFS[step];
   const isLast = step === STEP_DEFS.length - 1;
-
-  useEffect(() => setMounted(true), []);
 
   const handleDone = async () => {
     setSaving(true);
@@ -194,7 +189,10 @@ export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalP
     }
   };
 
-  if (!mounted) return null;
+  // Client-only: `document` is unavailable during SSR. Both call sites render
+  // this modal post-hydration (sidebar click; layout gated on _hasHydrated),
+  // so this never produces a hydration mismatch.
+  if (typeof document === "undefined") return null;
 
   // Render into document.body so the overlay escapes the sidebar wrapper's
   // CSS transform (layout.tsx), which would otherwise make `fixed` resolve
