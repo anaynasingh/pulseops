@@ -35,12 +35,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 ## Active streams
 
 **Stream A (backend) builders:** claude
-**Stream A (backend) handoff head:** None
-**Stream A (backend) status:** IN PROGRESS
+**Stream A (backend) handoff head:** b4b0afc
+**Stream A (backend) status:** DONE — built, awaiting probe
 
 **Stream B (frontend) builders:** claude
-**Stream B (frontend) handoff head:** None
-**Stream B (frontend) status:** IN PROGRESS
+**Stream B (frontend) handoff head:** b4b0afc
+**Stream B (frontend) status:** DONE — built, awaiting probe
 
 ## Gemini Reviews
 
