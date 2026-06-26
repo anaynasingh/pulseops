@@ -44,6 +44,8 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Gemini Reviews
 
+**PR #8:** WAITING_RESPONSE | reviewed 2026-06-26 | findings: 1 MEDIUM (Route 3 payload.description) — FIXED in 9228042, thread resolved | repo: P33-AI (dev->master, intake-functional)
+
 <!-- Populated by /ag-ship when a dev->main PR is opened. -->
 <!-- Two states: WAITING_REVIEW (not yet reviewed) and WAITING_RESPONSE (reviewed, findings pending). -->
 <!-- Cleared when Orchestrator records a disposition (fix/defer/skip). -->
