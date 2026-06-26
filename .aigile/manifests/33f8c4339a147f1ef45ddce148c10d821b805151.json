@@ -7,9 +7,9 @@
     "name": "Anayna Singh",
     "email": "anayna.singh@prospect33.com"
   },
-  "status": "in-flight",
+  "status": "finalised",
   "started_at": "2026-06-26T09:45:50Z",
-  "finalised_at": null,
+  "finalised_at": "2026-06-26T12:12:57Z",
   "phases": [
     {
       "name": "Building",
@@ -45,9 +45,23 @@
         "low": 0
       }
     },
-    "gemini": null
+    "gemini": {
+      "recorded_at": "2026-06-26T12:12:57Z",
+      "outcome": "PASS",
+      "pr_number": 9,
+      "notes": "clean — no feedback"
+    }
   },
-  "contributors": [],
-  "diff_stat": null,
+  "contributors": [
+    {
+      "name": "Anayna Singh",
+      "email": "anayna.singh@prospect33.com"
+    }
+  ],
+  "diff_stat": {
+    "files_changed": 17,
+    "insertions": 460,
+    "deletions": 9
+  },
   "reviewer_family": "codex"
 }
