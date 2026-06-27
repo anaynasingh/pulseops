@@ -4,13 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** guide-modal-center
-**Burst base:** ec8a597a86b10d31ef6076ce5496d19afc1bc438
-**Burst base accepted dirty:** yes - untracked .aigile/retros/ is AI-gile retrospective infra unrelated to the guide-modal-center frontend fix; will not be staged in the burst commit
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run /ag-ship to ship guide-modal-center.
-**Last updated:** 2026-06-26 (guide-modal-center steer: SHIP)
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Next action:** Burst complete — guide-modal-center shipped to prod (P33-AI master, PR #10, merge 9e73652) and auto-deployed via Railway. Gemini: 2 review rounds (useSyncExternalStore + module-scope callbacks) applied and resolved; final review clean. Live click-through against the prod deploy still to confirm. /clear when ready; next session runs /ag-plan.
+**Last updated:** 2026-06-27 (guide-modal-center shipped to prod)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
