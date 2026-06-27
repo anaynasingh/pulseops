@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.1.0",
+  "burst_sha": "ec8a597a86b10d31ef6076ce5496d19afc1bc438",
+  "project_slug": "pulseops",
+  "burst_label": null,
+  "orchestrator": {
+    "name": "Anayna Singh",
+    "email": "anayna.singh@prospect33.com"
+  },
+  "status": "in-flight",
+  "started_at": "2026-06-26T12:31:19Z",
+  "finalised_at": null,
+  "phases": [
+    {
+      "name": "Building",
+      "entered_at": "2026-06-26T12:31:19Z"
+    },
+    {
+      "name": "Probing",
+      "entered_at": "2026-06-26T12:33:04Z"
+    },
+    {
+      "name": "Piloting",
+      "entered_at": "2026-06-26T12:48:36Z"
+    }
+  ],
+  "streams": [
+    {
+      "name": "portal-the-modal",
+      "status": "done",
+      "builder": "claude",
+      "builder_family": "claude"
+    }
+  ],
+  "stream_dependency_edges": [],
+  "reviews": {
+    "codex": {
+      "recorded_at": "2026-06-26T12:47:10Z",
+      "summary": "R1: react-hooks/set-state-in-effect lint error on mount-effect guard (FIXED via render-time typeof document guard). R2: code clean; one process finding re AIGILE_PLAN/current untracked vs STATUS resume pointer (known AI-gile model - resume reads local worktree, survives /clear).",
+      "findings_count": 2,
+      "severity_counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 2,
+        "low": 0
+      }
+    },
+    "gemini": null
+  },
+  "contributors": [],
+  "diff_stat": null,
+  "reviewer_family": "codex"
+}
