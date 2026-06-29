@@ -35,7 +35,11 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    task = Task(**payload.model_dump(), created_by=current_user.id)
+    data = payload.model_dump()
+    # No task is left unassigned: default the assignee to its creator.
+    if data.get("assigned_to") is None:
+        data["assigned_to"] = current_user.id
+    task = Task(**data, created_by=current_user.id)
     db.add(task)
     await db.commit()
     await db.refresh(task)
