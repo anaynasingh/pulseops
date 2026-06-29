@@ -173,9 +173,19 @@ async def root():
 # streamable_http_app() requires its own lifecycle (run()) and fails embedded.
 try:
     from app.api.v1.mcp_server import mcp
-    app.mount("/mcp", SSEKeepAliveMiddleware(mcp.sse_app()))
+    # FastMCP's sse_app() advertises its message endpoint to clients using
+    # settings.message_path verbatim. Mounting the sub-app under "/mcp" does
+    # NOT rewrite that path, so it stays the root-relative default
+    # "/messages/". Clients then POST tool calls to /messages/ -> 404, the MCP
+    # session never exchanges messages, and tools silently return nothing
+    # ("no tasks"). Fix: bake the /mcp prefix into both paths and mount at root,
+    # so the advertised endpoint matches the real handler (/mcp/messages/).
+    # Client connection URL is unchanged (still .../mcp/sse).
+    mcp.settings.sse_path = "/mcp/sse"
+    mcp.settings.message_path = "/mcp/messages/"
+    app.mount("/", SSEKeepAliveMiddleware(mcp.sse_app()))
     import logging
-    logging.getLogger(__name__).info("MCP server mounted at /mcp (SSE + keep-alive)")
+    logging.getLogger(__name__).info("MCP server mounted (SSE /mcp/sse + messages /mcp/messages/)")
 except Exception as e:
     import logging
     logging.getLogger(__name__).error(f"MCP server failed to mount: {e}")
