@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { NewProjectModal } from "@/components/kanban/NewProjectModal";
 import { useAuthStore } from "@/lib/store";
 import Link from "next/link";
 
@@ -19,6 +20,7 @@ export default function BoardPage() {
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState("");
   const [scope, setScope] = useState<"mine" | "all">("mine");
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -26,15 +28,26 @@ export default function BoardPage() {
         title="Kanban Board"
         subtitle="Drag and drop to update project status"
         actions={
-          <Link
-            href="/intake"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
-          >
-            <span className="ai-pulse">✦</span>
-            <span>AI Intake</span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setNewProjectOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+            >
+              <span className="text-sm leading-none">+</span>
+              <span>New Project</span>
+            </button>
+            <Link
+              href="/intake"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-colors"
+            >
+              <span className="ai-pulse">✦</span>
+              <span>AI Intake</span>
+            </Link>
+          </div>
         }
       />
+
+      <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
 
       {/* Filters bar */}
       <div className="flex items-center gap-2 md:gap-3 px-3 md:px-6 py-3 border-b border-slate-800/60 shrink-0 overflow-x-auto">
