@@ -71,11 +71,11 @@ function Step2Content() {
     <div className="space-y-3">
       <ol className="space-y-3 text-sm text-slate-700">
         {[
-          <>Open Claude Code in your terminal: type <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">claude</code></>,
-          <>In Claude Code, open the <strong>Connectors</strong> panel (plug icon in the sidebar)</>,
-          <>Find <strong>Microsoft 365</strong> and click <strong>Connect</strong></>,
-          <>Sign in with your <strong>@prospect33.com</strong> Microsoft account</>,
-          <>Grant permissions for <strong>Calendar, Teams</strong> and <strong>Email</strong></>,
+          <>Go to <strong>claude.ai → Settings → Connectors</strong> (in a web browser)</>,
+          <>Find <strong>Microsoft 365</strong> → click <strong>Connect</strong></>,
+          <>Sign in with your <strong>@prospect33.com</strong> Microsoft work account and grant the requested permissions (<strong>Calendar, Teams, Email</strong>)</>,
+          <>Open your terminal and run <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">claude</code></>,
+          <>In Claude Code, type <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">/mcp</code> to confirm <strong>Microsoft 365</strong> shows as <strong>Connected</strong> (authenticate there if prompted)</>,
         ].map((step, i) => (
           <li key={i} className="flex gap-3">
             <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
@@ -84,7 +84,7 @@ function Step2Content() {
         ))}
       </ol>
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-        Once connected, Claude automatically reads meeting transcripts and pulls action items — no copy-pasting.
+        Now just ask Claude to read a meeting or email and turn it into tasks — it&apos;ll add them to your dashboard. No copy-pasting.
       </div>
     </div>
   );
