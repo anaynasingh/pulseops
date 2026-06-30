@@ -71,7 +71,7 @@ function Step2Content() {
     <div className="space-y-3">
       <ol className="space-y-3 text-sm text-slate-700">
         {[
-          <>Go to <strong>claude.ai → Settings → Connectors</strong> (in a web browser)</>,
+          <>In a web browser, open <strong>claude.ai</strong> → left pane → <strong>Customize → Connectors</strong></>,
           <>Find <strong>Microsoft 365</strong> → click <strong>Connect</strong></>,
           <>Sign in with your <strong>@prospect33.com</strong> Microsoft work account and grant the requested permissions (<strong>Calendar, Teams, Email</strong>)</>,
           <>Open your terminal and run <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">claude</code></>,
