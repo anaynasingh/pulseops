@@ -27,26 +27,45 @@ async def get_current_user(
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
-    payload = decode_token(credentials.credentials)
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    token = credentials.credentials
+    payload = decode_token(token)
 
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+    # A token that decodes as a valid JWT is handled ENTIRELY in this branch and
+    # must NEVER fall through to the api_key path. A valid JWT whose user is
+    # missing/inactive (or has no `sub`) still 401s here — identical to the
+    # behaviour before the api_key fallback existed.
+    if payload is not None:
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    # Check cache first
-    cached = _user_cache.get(user_id)
-    if cached and (time.time() - cached[0]) < _USER_CACHE_TTL:
-        return cached[1]
+        # Check cache first
+        cached = _user_cache.get(user_id)
+        if cached and (time.time() - cached[0]) < _USER_CACHE_TTL:
+            return cached[1]
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    _user_cache[user_id] = (time.time(), user)   # cache it
-    return user
+        _user_cache[user_id] = (time.time(), user)   # cache it
+        return user
+
+    # Not a JWT — try the long-lived api_key (the permanent MCP/agent credential).
+    # This mirrors mcp_server._authenticate(). One DB lookup per request: the
+    # cache is keyed by user_id and cannot be read before the key resolves a
+    # user, but we still populate it so a later JWT request for the same user
+    # hits the cache. The `if token` guard keeps an empty bearer from matching an
+    # empty-string api_key column.
+    if token:
+        result = await db.execute(select(User).where(User.api_key == token))
+        user = result.scalar_one_or_none()
+        if user and user.is_active:
+            _user_cache[str(user.id)] = (time.time(), user)
+            return user
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
