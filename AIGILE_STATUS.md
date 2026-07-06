@@ -4,12 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** assignable-users-sso
-**Burst base:** 6cdf14dd98be13955467d6a57c74247abe9c3ed4
-**Plan reference:** N/A - fix committed ad hoc (381af90) before STATUS reconciliation; single-file backend fix, no plan artefacts
-**Next action:** Run /ag-ship to ship assignable-users-sso.
-**Last updated:** 2026-07-06 (steer: SHIP - skip Codex, ag-challenge PASS_CLEAN sufficient for 2-line validated fix)
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Next action:** Burst complete - /clear when ready, next session runs /ag-plan.
+**Last updated:** 2026-07-06 (assignable-users-sso shipped to P33-AI master via PR #16, merge 528214e; prod deploy triggered)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -47,6 +46,9 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
      **PR #N:** WAITING_REVIEW | opened <ISO> | retries: 0
      **PR #N:** WAITING_RESPONSE | reviewed <ISO> | reviewed_sha: <sha> | findings: HIGH: x, MEDIUM: y
      On disposition: remove entry; record outcome in HISTORY as **Gemini:** <outcome> -->
+
+<!-- PR #16 shipped 2026-07-06: merged to P33-AI master (528214e). Gemini: R1 model_dump default-clobber fixed (f2c2939); R2 omit-vs-null ruled intentional (never-unassigned invariant), replied + resolved. -->
+
 
 ## Deferred Reviews
 
