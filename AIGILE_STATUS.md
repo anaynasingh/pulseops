@@ -4,11 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Next action:** Burst complete - /clear when ready, next session runs /ag-plan.
-**Last updated:** 2026-07-06 (assignable-users-sso shipped to P33-AI master via PR #16, merge 528214e; prod deploy triggered)
+**Phase:** Building
+**Active burst:** mcp-longlived-apikey
+**Burst base:** b93641132e752836f4062e836de5f6887530b997
+**Plan reference:** AIGILE_PLAN/current/
+**Next action:** Build: Stream A (deps.py api_key fallback + TestApiKeyAuth tests) and Stream B (local MCP server + docs → PULSEOPS_API_KEY), parallel. Branch fix/mcp-longlived-apikey.
+**Last updated:** 2026-07-06 (mcp-longlived-apikey approved; burst base b936411)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -33,9 +34,13 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream assignable-users-sso builders:** claude
-**Stream assignable-users-sso handoff head:** None
-**Stream assignable-users-sso status:** COMPLETE (steer: SHIP 2026-07-06)
+**Stream A (backend) builders:** claude
+**Stream A (backend) handoff head:** None
+**Stream A (backend) status:** IN PROGRESS
+
+**Stream B (mcp-server+docs) builders:** claude
+**Stream B (mcp-server+docs) handoff head:** None
+**Stream B (mcp-server+docs) status:** IN PROGRESS
 
 ## Gemini Reviews
 
