@@ -5,12 +5,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 ## Current state
 
 **Phase:** Promoting
-**Active burst:** guide-modal-center
-**Burst base:** ec8a597a86b10d31ef6076ce5496d19afc1bc438
-**Burst base accepted dirty:** yes - untracked .aigile/retros/ is AI-gile retrospective infra unrelated to the guide-modal-center frontend fix; will not be staged in the burst commit
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run /ag-ship to ship guide-modal-center.
-**Last updated:** 2026-06-26 (guide-modal-center steer: SHIP)
+**Active burst:** assignable-users-sso
+**Burst base:** 6cdf14dd98be13955467d6a57c74247abe9c3ed4
+**Plan reference:** N/A - fix committed ad hoc (381af90) before STATUS reconciliation; single-file backend fix, no plan artefacts
+**Next action:** Run /ag-ship to ship assignable-users-sso.
+**Last updated:** 2026-07-06 (steer: SHIP - skip Codex, ag-challenge PASS_CLEAN sufficient for 2-line validated fix)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -35,9 +34,9 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream portal-the-modal builders:** claude
-**Stream portal-the-modal handoff head:** None
-**Stream portal-the-modal status:** COMPLETE
+**Stream assignable-users-sso builders:** claude
+**Stream assignable-users-sso handoff head:** None
+**Stream assignable-users-sso status:** COMPLETE (steer: SHIP 2026-07-06)
 
 ## Gemini Reviews
 
@@ -73,11 +72,8 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 <!-- Append completed Bursts. Keep last 5 entries. Full archive in AIGILE_HISTORY.md. -->
 <!-- Long-term burst sequence lives in AIGILE_PLAN/long-term/sequence.md. -->
 
-- [2026-06-25] dashboard-complete-gap — task-completion layout gap fix (AnimatePresence reflow + 300ms check beat). PASS. Shipped prod b67f6dd (PR #2).
-- [2026-06-25] focus-reminder-toggle — sidebar toggle knob containment + "Test"→"Preview" + a11y. PASS. Shipped prod f617541 (PR #3).
-- [2026-06-25] reminder-modal — "Focus Check" title + prefetch/skeleton (no empty flash). PASS. Shipped prod 7180bed (PR #4).
-- [2026-06-25] remove-my-tasks — dropped redundant dashboard My Tasks list + deleted component. PASS. Shipped prod db4bacd (PR #5).
 - [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed; ship Gemini: week-window + style). Shipped prod 2812192 (PR #6).
 - [2026-06-26] intake-functional — AI intake routes to project/task (user override + parent picker); confirm creates real Task rows, logs activity, busts kanban cache; fixed board-never-refreshes query-key bug. PASS (static+Codex; live deferred to prod deploy. Codex: C1 race + C2 test fixed, C3 progress_pct deferred; Gemini: 1 MEDIUM fixed). Shipped prod 63a8b48 (PR #8).
 - [2026-06-26] intake-default-assignee — intake confirm defaults new project owner_id + created task assigned_to to the confirming user (model_fields_set omit-vs-null; explicit override/null preserved; Route 2 existing owner untouched). PASS (static + Codex APPROVE 0 findings; live 24-test suite + API deferred to deploy per steer).
 - [2026-06-26] guide-modal-center — Claude setup "guide" modal now centers on viewport (createPortal to document.body, escaping the transformed sidebar containing block). PASS (build+tsc+eslint clean; Codex R1 lint error fixed, R2 process-artefact finding accepted as known-architecture). Steer=SHIP.
+- [2026-07-06] assignable-users-sso — GET /users/ now returns all logged-in users (or_(ms_oid, password_hash)), not just 3 password-seeded accounts; SSO users were excluded by password_hash-only filter. PASS (SQL compile + root-cause; ag-challenge PASS_CLEAN). Steer=SHIP, Codex skipped (2-line validated fix, noisy base range).

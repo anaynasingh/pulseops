@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from app.db.session import get_db
 from app.models.models import User
 from app.schemas.schemas import UserOut
@@ -20,7 +20,7 @@ async def list_users(
         select(User)
         .where(
             User.is_active == True,
-            User.password_hash.isnot(None),
+            or_(User.ms_oid.isnot(None), User.password_hash.isnot(None)),  # anyone who has logged in (SSO or legacy password)
             User.email.like("%prospect33.com%"),  # only real team members
         )
         .order_by(User.name)

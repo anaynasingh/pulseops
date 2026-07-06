@@ -1,1 +1,4 @@
-{"understand_anything_mode": "enabled"}
+{
+  "understand_anything_mode": "enabled",
+  "disabled_service_checks": []
+}
