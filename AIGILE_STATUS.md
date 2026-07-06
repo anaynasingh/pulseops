@@ -4,13 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** guide-modal-center
-**Burst base:** ec8a597a86b10d31ef6076ce5496d19afc1bc438
-**Burst base accepted dirty:** yes - untracked .aigile/retros/ is AI-gile retrospective infra unrelated to the guide-modal-center frontend fix; will not be staged in the burst commit
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run /ag-ship to ship guide-modal-center.
-**Last updated:** 2026-06-26 (guide-modal-center steer: SHIP)
+**Phase:** Probing
+**Active burst:** assignable-users-sso
+**Burst base:** 6cdf14dd98be13955467d6a57c74247abe9c3ed4
+**Plan reference:** N/A - fix committed ad hoc (381af90) before STATUS reconciliation; single-file backend fix, no plan artefacts
+**Next action:** Run /ag-probe to verify assignable-users-sso, then push + open PR to master.
+**Last updated:** 2026-07-06 (reconcile: guide-modal-center already shipped 2026-06-26; assignable-users-sso committed + master merged, entering probe)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -35,9 +34,9 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream portal-the-modal builders:** claude
-**Stream portal-the-modal handoff head:** None
-**Stream portal-the-modal status:** COMPLETE
+**Stream assignable-users-sso builders:** claude
+**Stream assignable-users-sso handoff head:** None
+**Stream assignable-users-sso status:** COMPLETE
 
 ## Gemini Reviews
 

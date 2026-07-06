@@ -83,6 +83,14 @@ starts with a forced ag-init. This ensures canonical skills and settings are alw
 Start every non-trivial task in Plan Mode. Iterate until the plan is
 solid before building. A good plan prevents most correction Bursts.
 
+### Build commits
+
+During a burst build (STATUS Phase=Building), commit completed stream
+work as it lands — do not wait to be asked. The harness default
+"commit only when requested" is superseded by the burst workflow.
+The burst base is the Codex adversarial review anchor; commits must
+land on dev for the review to cover the actual diff.
+
 ### Verify your work
 
 Always self-verify. Run tests, check the UI, check the API. Flag
@@ -425,6 +433,13 @@ overrides for a true direct-to-main push.
   disables the guard for everyone on the repo.
 - An empty `.aigile-allow-main` (no reason on first line) is
   refused.
+
+### Docs sync with build
+
+When a burst changes a number, capability, or behaviour that a
+`docs/papers/current/` file describes, update the relevant paper in
+the same commit. The papers are the living specification; they must
+not drift from what the system does.
 
 <!-- AIGILE:END -->
 
