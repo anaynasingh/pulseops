@@ -594,7 +594,8 @@ async def create_tasks_from_transcript(
             description=f"From meeting: {transcript.title}. Owner: {item.get('owner', 'TBD')}. Deadline: {item.get('deadline', 'TBD')}",
             priority=PriorityLevel(raw_priority),
             status=ProjectStatus.todo,
-            assigned_to=assignee_user.id if assignee_user else None,
+            # No task is left unassigned: fall back to the creator.
+            assigned_to=assignee_user.id if assignee_user else current_user.id,
             due_date=due_date,
             created_by=current_user.id,
         )
@@ -1292,7 +1293,8 @@ async def confirm_tasks(
             description=item.get("description"),
             priority=PriorityLevel(raw_priority),
             status=ProjectStatus.todo,
-            assigned_to=assignee_user.id if assignee_user else None,
+            # No task is left unassigned: fall back to the creator.
+            assigned_to=assignee_user.id if assignee_user else current_user.id,
             due_date=due_date,
             created_by=current_user.id,
         )
