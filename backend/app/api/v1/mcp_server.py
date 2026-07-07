@@ -15,12 +15,13 @@ from typing import Optional
 from uuid import UUID
 
 from mcp.server.fastmcp import FastMCP
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from sqlalchemy.orm import selectinload
 
 from app.db.session import AsyncSessionLocal
 from app.models.models import (
     Project, Task, ProjectStatus, PriorityLevel, User, TranscriptSearchLog,
+    ActivityLog,
 )
 from app.core.security import decode_token
 
@@ -391,3 +392,462 @@ async def get_transcript_diagnostics() -> str:
     for l in [l for l in logs if l.was_correct is False]:
         lines.append(f"  • '{l.search_query}' → '{l.returned_title}'" + (f"\n    {l.correction_note}" if l.correction_note else ""))
     return "\n".join(lines) if lines else "No data yet."
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Board / project management tools (parity with the local stdio MCP server).
+# These mirror the REST endpoints in projects.py / kanban.py / analytics.py so a
+# single hosted connection can manage the whole board — not just "my" tasks.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _parse_date(s: Optional[str]):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+async def _resolve_project(db, ref: str) -> Optional[Project]:
+    """Look up a project by UUID first, then by partial title match."""
+    ref = (ref or "").strip()
+    try:
+        proj = (await db.execute(select(Project).where(Project.id == UUID(ref)))).scalar_one_or_none()
+        if proj:
+            return proj
+    except ValueError:
+        pass
+    return (await db.execute(
+        select(Project).where(Project.title.ilike(f"%{ref}%")).limit(1)
+    )).scalar_one_or_none()
+
+
+def _bust_kanban_cache() -> None:
+    """Clear the projects.py kanban cache so mutations show up immediately."""
+    try:
+        from app.api.v1.projects import _kanban_cache
+        _kanban_cache.clear()
+    except Exception:
+        pass
+
+
+@mcp.tool()
+async def list_all_projects(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 100,
+) -> str:
+    """
+    List ALL projects on the board (everyone's, not just yours).
+    status: intake/todo/in_progress/blocked/review/done/potential/cancelled
+    priority: low/medium/high/urgent
+    query: keyword match on title/description
+    """
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+
+    async with AsyncSessionLocal() as db:
+        q = (
+            select(Project)
+            .options(selectinload(Project.owner))
+            .order_by(Project.kanban_order, Project.updated_at.desc())
+        )
+        if status:
+            try:
+                q = q.where(Project.status == ProjectStatus(status))
+            except ValueError:
+                pass
+        if priority:
+            try:
+                q = q.where(Project.priority == PriorityLevel(priority))
+            except ValueError:
+                pass
+        if query:
+            q = q.where(or_(Project.title.ilike(f"%{query}%"), Project.description.ilike(f"%{query}%")))
+        q = q.limit(max(1, min(limit, 200)))
+        projects = (await db.execute(q)).scalars().all()
+
+    if not projects:
+        return "No projects found."
+
+    lines = [f"**All projects** ({len(projects)}):\n"]
+    for p in projects:
+        owner = p.owner.name.split()[0] if p.owner else "—"
+        due = f" | due {p.due_date}" if p.due_date else ""
+        lines.append(
+            f"• [{p.status.value}] {p.title} [{p.priority.value}] — {p.progress_pct}% | {owner}{due}\n  id: {p.id}"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def get_project(project_id_or_name: str) -> str:
+    """Full details of one project (by UUID or partial name): tasks, progress, blockers, dates, tags."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+
+    async with AsyncSessionLocal() as db:
+        stub = await _resolve_project(db, project_id_or_name)
+        if not stub:
+            return f"❌ No project matching '{project_id_or_name}'."
+        proj = (await db.execute(
+            select(Project)
+            .options(selectinload(Project.tasks).selectinload(Task.assignee), selectinload(Project.owner))
+            .where(Project.id == stub.id)
+        )).scalar_one()
+
+    tasks = proj.tasks or []
+    done = [t for t in tasks if t.is_completed]
+    lines = [
+        f"**{proj.title}**  (id: {proj.id})",
+        f"Status: {proj.status.value} | Priority: {proj.priority.value} | {proj.progress_pct}% done",
+        f"Owner: {proj.owner.name if proj.owner else 'None'} | Due: {proj.due_date or 'not set'}",
+        f"Tasks: {len(done)}/{len(tasks)} done",
+    ]
+    if proj.description:
+        lines.append(f"\n{proj.description}")
+    if proj.tags:
+        lines.append(f"Tags: {', '.join(proj.tags)}")
+    if proj.blockers:
+        lines.append(f"⚠️ Blockers: {proj.blockers}")
+    if proj.next_action:
+        lines.append(f"➡️ Next: {proj.next_action}")
+    open_tasks = [t for t in tasks if not t.is_completed and t.status.value != "cancelled"]
+    if open_tasks:
+        lines.append("\nOpen tasks:")
+        for t in open_tasks[:20]:
+            who = t.assignee.name.split()[0] if t.assignee else "?"
+            tdue = f" due {t.due_date}" if t.due_date else ""
+            lines.append(f"  • [{t.priority.value}] {t.title} ({who}{tdue})")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def create_project(
+    title: str,
+    description: Optional[str] = None,
+    priority: str = "medium",
+    status: str = "intake",
+    due_date: Optional[str] = None,
+    tags: Optional[str] = None,
+) -> str:
+    """
+    Create a new project. priority=low/medium/high/urgent.
+    status=intake/todo/in_progress/blocked/review/done/potential. due_date=YYYY-MM-DD.
+    tags=comma-separated. You become the owner.
+    """
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+    if user.role.value == "viewer":
+        return "❌ Your role (viewer) cannot create projects."
+
+    try:
+        pri = PriorityLevel(priority.lower())
+    except ValueError:
+        pri = PriorityLevel.medium
+    try:
+        st = ProjectStatus(status.lower())
+    except ValueError:
+        st = ProjectStatus.intake
+    tag_list = [t.strip() for t in tags.split(",")] if tags else []
+
+    async with AsyncSessionLocal() as db:
+        proj = Project(
+            title=title, description=description, priority=pri, status=st,
+            due_date=_parse_date(due_date), tags=tag_list,
+            owner_id=user.id, created_by=user.id,
+        )
+        db.add(proj)
+        await db.flush()
+        db.add(ActivityLog(entity_type="project", entity_id=proj.id, user_id=user.id, action="created"))
+        await db.commit()
+        pid, ptitle = proj.id, proj.title
+    _bust_kanban_cache()
+    return f"✅ Created project **{ptitle}** [{st.value}/{pri.value}] — id: {pid}"
+
+
+@mcp.tool()
+async def update_project(
+    project_id_or_name: str,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    progress_pct: Optional[int] = None,
+    due_date: Optional[str] = None,
+    blockers: Optional[str] = None,
+    next_action: Optional[str] = None,
+    latest_update: Optional[str] = None,
+) -> str:
+    """Update a project's fields. Only the owner/creator (or an admin) may edit."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+
+    async with AsyncSessionLocal() as db:
+        proj = await _resolve_project(db, project_id_or_name)
+        if not proj:
+            return f"❌ No project matching '{project_id_or_name}'."
+        if not (proj.owner_id == user.id or proj.created_by == user.id or user.role.value == "admin"):
+            return "❌ You can only edit projects you own or created."
+
+        changes = []
+        if status:
+            try:
+                old = proj.status.value
+                proj.status = ProjectStatus(status)
+                changes.append(f"status {old}→{status}")
+            except ValueError:
+                pass
+        if priority:
+            try:
+                proj.priority = PriorityLevel(priority)
+                changes.append(f"priority→{priority}")
+            except ValueError:
+                pass
+        if progress_pct is not None:
+            proj.progress_pct = max(0, min(100, int(progress_pct)))
+            changes.append(f"progress→{proj.progress_pct}%")
+        if due_date is not None:
+            proj.due_date = _parse_date(due_date)
+            changes.append(f"due→{proj.due_date}")
+        if blockers is not None:
+            proj.blockers = blockers
+            changes.append("blockers")
+        if next_action is not None:
+            proj.next_action = next_action
+            changes.append("next_action")
+        if latest_update is not None:
+            proj.latest_update = latest_update
+            changes.append("update")
+
+        if not changes:
+            return "No changes specified."
+        db.add(ActivityLog(entity_type="project", entity_id=proj.id, user_id=user.id, action="updated"))
+        await db.commit()
+        title = proj.title
+    _bust_kanban_cache()
+    return f"✅ Updated **{title}**: {', '.join(changes)}"
+
+
+@mcp.tool()
+async def move_project(project_id_or_name: str, new_status: str) -> str:
+    """
+    Move a project to a different Kanban column.
+    new_status: intake/todo/in_progress/blocked/review/done/potential/cancelled
+    """
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+    try:
+        st = ProjectStatus(new_status)
+    except ValueError:
+        return f"❌ Invalid status. Use: {', '.join(s.value for s in ProjectStatus)}"
+
+    async with AsyncSessionLocal() as db:
+        proj = await _resolve_project(db, project_id_or_name)
+        if not proj:
+            return f"❌ No project matching '{project_id_or_name}'."
+        old = proj.status.value
+        proj.status = st
+        db.add(ActivityLog(entity_type="project", entity_id=proj.id, user_id=user.id,
+                           action="moved", old_value=old, new_value=st.value))
+        await db.commit()
+        title = proj.title
+    _bust_kanban_cache()
+    return f"✅ Moved **{title}**: {old} → {st.value}"
+
+
+@mcp.tool()
+async def get_dashboard() -> str:
+    """Workspace dashboard: project counts by status, overdue, task totals, and top high-priority items."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+
+    async with AsyncSessionLocal() as db:
+        async def _count(*where):
+            stmt = select(func.count()).select_from(Project)
+            for w in where:
+                stmt = stmt.where(w)
+            return (await db.execute(stmt)).scalar()
+
+        total = await _count()
+        active = await _count(Project.status.in_([ProjectStatus.in_progress, ProjectStatus.review]))
+        blocked = await _count(Project.status == ProjectStatus.blocked)
+        intake = await _count(Project.status == ProjectStatus.intake)
+        done_total = await _count(Project.status == ProjectStatus.done)
+        overdue = await _count(Project.due_date < date.today(), Project.status.notin_([ProjectStatus.done]))
+        total_tasks = (await db.execute(select(func.count()).select_from(Task))).scalar()
+        open_tasks = (await db.execute(
+            select(func.count()).select_from(Task).where(Task.is_completed == False)
+        )).scalar()
+        hp = (await db.execute(
+            select(Project)
+            .where(Project.priority.in_([PriorityLevel.high, PriorityLevel.urgent]),
+                   Project.status.notin_([ProjectStatus.done]))
+            .order_by(Project.due_date)
+            .limit(5)
+        )).scalars().all()
+
+    lines = [
+        "**PulseOps Dashboard**",
+        "=" * 32,
+        f"Projects: {total} total | {active} active | {blocked} blocked 🔴 | {intake} intake | {done_total} done",
+        f"Overdue: {overdue} ⚠️",
+        f"Tasks: {total_tasks} total | {open_tasks} open",
+    ]
+    if hp:
+        lines.append("\nHigh-priority (open):")
+        for p in hp:
+            due = f" (due {p.due_date})" if p.due_date else ""
+            lines.append(f"  🔺 {p.title} [{p.priority.value}]{due}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def get_gantt() -> str:
+    """Timeline view: active projects with start (created) → due dates and their open tasks."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+
+    async with AsyncSessionLocal() as db:
+        projects = (await db.execute(
+            select(Project)
+            .options(selectinload(Project.tasks))
+            .where(Project.status.notin_([ProjectStatus.done, ProjectStatus.cancelled]))
+            .order_by(Project.created_at)
+        )).scalars().all()
+
+    if not projects:
+        return "No active projects for the timeline."
+
+    lines = ["**Gantt / Timeline**", "=" * 32]
+    for p in projects:
+        start = p.created_at.date() if p.created_at else "?"
+        end = p.due_date or "?"
+        lines.append(f"\n[{p.status.value}] {p.title}: {start} → {end}")
+        for t in (p.tasks or []):
+            if t.is_completed:
+                continue
+            lines.append(f"   • {t.title} → {t.due_date or '?'}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def search_projects(query: str) -> str:
+    """Keyword search across all projects and tasks by title/description."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+
+    async with AsyncSessionLocal() as db:
+        projs = (await db.execute(
+            select(Project)
+            .where(or_(Project.title.ilike(f"%{query}%"), Project.description.ilike(f"%{query}%")))
+            .limit(20)
+        )).scalars().all()
+        tasks = (await db.execute(
+            select(Task).options(selectinload(Task.project))
+            .where(Task.title.ilike(f"%{query}%")).limit(20)
+        )).scalars().all()
+
+    if not projs and not tasks:
+        return f"No results for '{query}'."
+    lines = [f"**Search: '{query}'**"]
+    if projs:
+        lines.append(f"\nProjects ({len(projs)}):")
+        for p in projs:
+            lines.append(f"  • [{p.status.value}] {p.title} — id: {p.id}")
+    if tasks:
+        lines.append(f"\nTasks ({len(tasks)}):")
+        for t in tasks:
+            pj = t.project.title if t.project else "?"
+            lines.append(f"  • {t.title} ({pj})")
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI-backed tools — thin wrappers that reuse the REST handlers in ai.py so all
+# LLM/dedup/persistence logic stays in one place. Results are returned as JSON.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _as_json(obj) -> str:
+    import json
+    payload = obj.model_dump(mode="json") if hasattr(obj, "model_dump") else obj
+    return "```json\n" + json.dumps(payload, indent=2, default=str) + "\n```"
+
+
+@mcp.tool()
+async def ai_chat(message: str) -> str:
+    """Ask the PulseOps AI assistant a question about your projects, or tell it to take an action."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+    from app.api.v1.ai import ai_chat as _handler, _ChatRequest
+    async with AsyncSessionLocal() as db:
+        result = await _handler(_ChatRequest(message=message), db=db, current_user=user)
+    if isinstance(result, dict):
+        import json
+        return result.get("reply") or result.get("message") or json.dumps(result, indent=2, default=str)
+    return str(result)
+
+
+@mcp.tool()
+async def process_email(body: str, subject: Optional[str] = None, sender: Optional[str] = None) -> str:
+    """Extract action items, people, and deadlines from an email (creates an email-ingestion record)."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+    from starlette.background import BackgroundTasks
+    from app.api.v1.ai import extract_email as _handler
+    from app.schemas.schemas import EmailAnalysisRequest
+    async with AsyncSessionLocal() as db:
+        out = await _handler(
+            EmailAnalysisRequest(subject=subject, body=body, sender=sender),
+            background_tasks=BackgroundTasks(), db=db, current_user=user,
+        )
+    return _as_json(out)
+
+
+@mcp.tool()
+async def analyze_transcript(
+    title: str, transcript: str, meeting_date: Optional[str] = None, source: str = "mcp",
+) -> str:
+    """Analyze a meeting transcript and extract action items, decisions, and blockers."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+    from starlette.background import BackgroundTasks
+    from app.api.v1.ai import extract_transcript as _handler
+    from app.schemas.schemas import TranscriptAnalysisRequest
+    async with AsyncSessionLocal() as db:
+        out = await _handler(
+            TranscriptAnalysisRequest(
+                title=title, raw_transcript=transcript, source=source,
+                meeting_date=_parse_date(meeting_date),
+            ),
+            background_tasks=BackgroundTasks(), db=db, current_user=user,
+        )
+    return _as_json(out)
+
+
+@mcp.tool()
+async def ai_intake(raw_input: str) -> str:
+    """Turn a raw natural-language request into a structured project card (for review — priority is a suggestion)."""
+    user = await _authenticate()
+    if not user:
+        return _auth_error()
+    from starlette.background import BackgroundTasks
+    from app.api.v1.ai import process_intake as _handler
+    from app.schemas.schemas import IntakeRequest
+    async with AsyncSessionLocal() as db:
+        out = await _handler(
+            IntakeRequest(raw_input=raw_input),
+            background_tasks=BackgroundTasks(), db=db, current_user=user,
+        )
+    return _as_json(out)

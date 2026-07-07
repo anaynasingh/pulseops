@@ -85,6 +85,9 @@ export const tasksApi = {
 export const aiApi = {
   chat: (message: string, project_id?: string, history?: { role: string; content: string }[]) =>
     api.post("/ai/chat", { message, project_id, history }).then((r) => r.data),
+  // Routes through the local Claude Code bridge — agentic, can take minutes
+  claudeChat: (message: string, session_id?: string | null) =>
+    api.post("/ai/claude-chat", { message, session_id }, { timeout: 600000 }).then((r) => r.data),
   intake: (raw_input: string, team_id?: string) =>
     api.post("/ai/intake", { raw_input, team_id }).then((r) => r.data),
   // data: { confirmed_priority, item_type?, target_project_id?, new_project_title?, title?, description?, owner_id?, team_id? }

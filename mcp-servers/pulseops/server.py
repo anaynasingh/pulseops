@@ -266,6 +266,27 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="list_transcripts",
+            description="List stored meeting transcripts (newest first) with summaries, action items, decisions, and blockers.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "number", "description": "Max number of transcripts to return (default 20)"},
+                },
+            },
+        ),
+        Tool(
+            name="get_transcript",
+            description="Get one meeting transcript by ID, including the full raw transcript text.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "transcript_id": {"type": "string", "description": "The UUID of the transcript"},
+                },
+                "required": ["transcript_id"],
+            },
+        ),
+        Tool(
             name="ai_chat",
             description="Send a message to the PulseOps AI assistant. It can answer questions about projects or create things.",
             inputSchema={
@@ -332,6 +353,10 @@ async def _dispatch(name: str, args: dict) -> str:
         return await _process_email(args)
     elif name == "analyze_transcript":
         return await _analyze_transcript(args)
+    elif name == "list_transcripts":
+        return await _list_transcripts(args)
+    elif name == "get_transcript":
+        return await _get_transcript(args)
     elif name == "ai_chat":
         return await _ai_chat(args)
     elif name == "ai_intake":
@@ -674,6 +699,73 @@ async def _analyze_transcript(args: dict) -> str:
     if summary:
         lines.append(f"\nSummary:\n  {summary}")
 
+    return "\n".join(lines)
+
+
+async def _list_transcripts(args: dict) -> str:
+    params = {"limit": int(args.get("limit") or 20)}
+    resp = await _request("GET", "/ai/transcripts", params=params)
+    if resp.status_code != 200:
+        return _error(resp.text, resp.status_code)
+
+    data = resp.json()
+    transcripts = data.get("transcripts", [])
+    if not transcripts:
+        return "No meeting transcripts stored yet."
+
+    lines = [f"Meeting Transcripts ({len(transcripts)}):", "=" * 40]
+    for t in transcripts:
+        lines.append(f"\n📄 {t['title']}  [{t['id']}]")
+        if t.get("meeting_date"):
+            lines.append(f"  Date: {t['meeting_date']} | Source: {t.get('source', 'manual')}")
+        if t.get("attendees"):
+            lines.append(f"  Attendees: {', '.join(t['attendees'])}")
+        if t.get("summary"):
+            lines.append(f"  Summary: {t['summary'][:300]}")
+        items = t.get("action_items") or []
+        if items:
+            lines.append(f"  Action items ({len(items)}):")
+            for item in items:
+                if isinstance(item, dict):
+                    title = item.get("task", item.get("title", str(item)))
+                    owner = item.get("owner", item.get("assigned_to", ""))
+                    lines.append(f"    • {title}" + (f" → {owner}" if owner else ""))
+                else:
+                    lines.append(f"    • {item}")
+        lines.append(f"  Tasks created: {'yes' if t.get('tasks_created') else 'no'}")
+    return "\n".join(lines)
+
+
+async def _get_transcript(args: dict) -> str:
+    resp = await _request("GET", f"/ai/transcripts/{args['transcript_id']}")
+    if resp.status_code != 200:
+        return _error(resp.text, resp.status_code)
+
+    t = resp.json()
+    lines = [f"Transcript: {t['title']}  [{t['id']}]", "=" * 40]
+    if t.get("meeting_date"):
+        lines.append(f"Date: {t['meeting_date']} | Source: {t.get('source', 'manual')}")
+    if t.get("attendees"):
+        lines.append(f"Attendees: {', '.join(t['attendees'])}")
+    if t.get("summary"):
+        lines.append(f"\nSummary:\n{t['summary']}")
+    if t.get("decisions"):
+        lines.append("\nDecisions:")
+        lines.extend(f"  🎯 {d}" for d in t["decisions"])
+    if t.get("blockers"):
+        lines.append("\nBlockers:")
+        lines.extend(f"  🔴 {b}" for b in t["blockers"])
+    items = t.get("action_items") or []
+    if items:
+        lines.append(f"\nAction items ({len(items)}):")
+        for item in items:
+            if isinstance(item, dict):
+                title = item.get("task", item.get("title", str(item)))
+                owner = item.get("owner", item.get("assigned_to", ""))
+                lines.append(f"  • {title}" + (f" → {owner}" if owner else ""))
+            else:
+                lines.append(f"  • {item}")
+    lines.append(f"\nFull transcript:\n{t.get('raw_transcript', '')}")
     return "\n".join(lines)
 
 
