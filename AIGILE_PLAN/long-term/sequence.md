@@ -40,6 +40,7 @@ Methodology fixes and other work not in the phased plan above. Each cites its tr
 
 - [2026-06-26] intake-functional — made the AI Intake confirm flow functional: classify project-vs-task + route to new/existing project, create real Task rows, log activity, fix board-refresh. Advances CHARTER O3. Trigger: user bug report (intake generated items but did nothing). Shipped prod 63a8b48 (PR #8).
 - [x] [2026-06-26] intake-default-assignee — intake confirm defaults new project owner_id + created task assigned_to to the confirming user (model_fields_set omit-vs-null contract; explicit override/null preserved; Route 2 existing owner untouched). Advances CHARTER O1 (backend API completeness). Trigger: user request (auto-assign task/project to the adder unless otherwise specified). Shipped prod 98316eb (PR #9).
+- [x] [2026-07-07] mcp-longlived-apikey — get_current_user accepts the permanent User.api_key as a bearer (non-JWT tokens); local pulseops MCP server uses PULSEOPS_API_KEY instead of email/password→JWT, so MCP connects once and never re-auths (also unblocks SSO users with no password). Advances CHARTER O1 + MCP connectivity. Trigger: user request ("connect once, MCP stays connected forever"). Shipped prod 637046c (PR #17).
 
 ## Pending decisions (not blocking active sequence)
 

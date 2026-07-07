@@ -7,9 +7,9 @@
     "name": "Anayna Singh",
     "email": "anayna.singh@prospect33.com"
   },
-  "status": "in-flight",
+  "status": "finalised",
   "started_at": "2026-07-06T11:55:36Z",
-  "finalised_at": null,
+  "finalised_at": "2026-07-07T05:26:14Z",
   "phases": [
     {
       "name": "Building",
@@ -28,8 +28,22 @@
   "stream_dependency_edges": [],
   "reviews": {
     "codex": null,
-    "gemini": null
+    "gemini": {
+      "recorded_at": "2026-07-07T05:26:13Z",
+      "outcome": "PASS",
+      "pr_number": 17,
+      "notes": "2 findings (HIGH jwt-shape, MED strip) both fixed pre-merge in 1271d58"
+    }
   },
-  "contributors": [],
-  "diff_stat": null
+  "contributors": [
+    {
+      "name": "Anayna Singh",
+      "email": "anayna.singh@prospect33.com"
+    }
+  ],
+  "diff_stat": {
+    "files_changed": 13,
+    "insertions": 232,
+    "deletions": 82
+  }
 }

@@ -4,12 +4,11 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** mcp-longlived-apikey
-**Burst base:** b93641132e752836f4062e836de5f6887530b997
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run /ag-ship to ship mcp-longlived-apikey. Branch fix/mcp-longlived-apikey. NOTE: live TestApiKeyAuth suite not yet run (no local backend) — deferred to deploy per repo precedent.
-**Last updated:** 2026-07-06 (mcp-longlived-apikey steer=SHIP; Codex code-review skipped-hung, covered by plan-challenge + build-challenge PASS_CLEAN)
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Next action:** Burst complete - /clear when ready, next session runs /ag-plan.
+**Last updated:** 2026-07-07 (mcp-longlived-apikey shipped to P33-AI master via PR #17, merge 637046c; prod deploy triggered; Gemini 2 findings fixed pre-merge)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
