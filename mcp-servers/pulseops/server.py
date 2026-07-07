@@ -21,7 +21,7 @@ from mcp.types import TextContent, Tool
 load_dotenv()
 
 API_URL = os.getenv("PULSEOPS_API_URL", "http://localhost:8001/api/v1").rstrip("/")
-API_KEY = os.getenv("PULSEOPS_API_KEY", "")
+API_KEY = os.getenv("PULSEOPS_API_KEY", "").strip()
 
 # ---------------------------------------------------------------------------
 # Auth: long-lived per-user API key (grab it from PulseOps Settings -> MCP

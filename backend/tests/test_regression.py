@@ -769,3 +769,9 @@ class TestApiKeyAuth:
         # A valid, matching key whose user is is_active=False must 401.
         r = CLIENT.get(f"{BASE}/auth/me", headers=auth(seeded_api_keys["disabled"]))
         assert r.status_code == 401
+
+    def test_jwt_shaped_invalid_token_rejected(self):
+        # A JWT-shaped (3-segment) but undecodable token must 401 WITHOUT falling
+        # through to the api_key lookup (Gemini HIGH: expired/invalid JWTs).
+        r = CLIENT.get(f"{BASE}/auth/me", headers=auth("aaaa.bbbb.cccc"))
+        assert r.status_code == 401

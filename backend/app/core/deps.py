@@ -57,8 +57,11 @@ async def get_current_user(
     # cache is keyed by user_id and cannot be read before the key resolves a
     # user, but we still populate it so a later JWT request for the same user
     # hits the cache. The `if token` guard keeps an empty bearer from matching an
-    # empty-string api_key column.
-    if token:
+    # empty-string api_key column. The `.count(".") != 2` guard means a
+    # JWT-shaped token (3 dot-separated segments) that failed to decode —
+    # i.e. an expired/invalid JWT — 401s immediately instead of wasting a DB
+    # query on the api_key column (api_keys from token_urlsafe contain no ".").
+    if token and token.count(".") != 2:
         result = await db.execute(select(User).where(User.api_key == token))
         user = result.scalar_one_or_none()
         if user and user.is_active:
