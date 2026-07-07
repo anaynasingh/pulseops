@@ -47,9 +47,33 @@ const STEP_DEFS = [
   },
 ];
 
-function Step1Content() {
+function Step1Content({ apiKey, loading }: { apiKey: string | null; loading: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copyToken = () => {
+    if (!apiKey) return;
+    navigator.clipboard.writeText(apiKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   return (
     <div className="space-y-3">
+      {/* Your token, shown up front so it's visible from the very first screen */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 space-y-2">
+        <p className="text-xs font-semibold text-indigo-900">🔑 Your personal Task Planner token</p>
+        <div className="relative">
+          <div className="bg-slate-900 rounded-lg p-3 pr-16 font-mono text-xs text-green-400 break-all select-all">
+            {loading ? "loading…" : (apiKey ?? "unavailable — reload the page")}
+          </div>
+          <button
+            onClick={copyToken}
+            disabled={!apiKey}
+            className="absolute top-2 right-2 text-xs bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 px-2 py-1 rounded transition-colors"
+          >
+            {copied ? "✓ Copied" : loading ? "…" : "Copy"}
+          </button>
+        </div>
+        <p className="text-xs text-indigo-800">This is your key — it tells Claude which tasks are yours. You&apos;ll paste it in Step 3 (it&apos;s pre-filled there too). Keep it private.</p>
+      </div>
       <p className="text-sm text-slate-600">Open a terminal (PowerShell on Windows) and run:</p>
       <div className="bg-slate-900 rounded-lg p-3 font-mono text-sm text-green-400 select-all">
         npm install -g @anthropic-ai/claude-code
@@ -90,17 +114,8 @@ function Step2Content() {
   );
 }
 
-function Step3Content({ token: _jwt }: { token: string | null }) {
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+function Step3Content({ apiKey, loading }: { apiKey: string | null; loading: boolean }) {
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    authApi.getApiKey()
-      .then(setApiKey)
-      .catch(() => setApiKey(null))
-      .finally(() => setLoading(false));
-  }, []);
 
   const displayToken = apiKey ?? (loading ? "loading…" : "<your-token>");
   // Single line so it pastes and runs cleanly in ANY shell. Backslash line
@@ -174,7 +189,18 @@ function Step4Content() {
 export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalProps) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [apiKeyLoading, setApiKeyLoading] = useState(true);
   const { setAuth, user, token } = useAuthStore();
+
+  // Fetch the token once for the whole modal so it can appear on the first
+  // screen (Step 1) and stay pre-filled in the command on Step 3.
+  useEffect(() => {
+    authApi.getApiKey()
+      .then(setApiKey)
+      .catch(() => setApiKey(null))
+      .finally(() => setApiKeyLoading(false));
+  }, []);
   const firstName = userName.split(" ")[0];
   const current = STEP_DEFS[step];
   const isLast = step === STEP_DEFS.length - 1;
@@ -196,9 +222,9 @@ export function ClaudeSetupModal({ userName, onDone, onSkip }: ClaudeSetupModalP
 
   const renderContent = () => {
     switch (step) {
-      case 0: return <Step1Content />;
+      case 0: return <Step1Content apiKey={apiKey} loading={apiKeyLoading} />;
       case 1: return <Step2Content />;
-      case 2: return <Step3Content token={token} />;
+      case 2: return <Step3Content apiKey={apiKey} loading={apiKeyLoading} />;
       case 3: return <Step4Content />;
       default: return null;
     }
