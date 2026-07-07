@@ -1,0 +1,4 @@
+.env
+.mcp-config.json
+workdir/
+__pycache__/

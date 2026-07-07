@@ -617,6 +617,125 @@ async def create_tasks_from_transcript(
     return {"tasks_created": len(task_outs), "tasks": [t.model_dump(mode="json") for t in task_outs]}
 
 
+# ── Meeting Transcript Reading (used by MCP / Claude bridge) ─────────────────
+
+@router.get("/transcripts", response_model=dict)
+async def list_transcripts(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List stored meeting transcripts (newest first) with summaries and action items."""
+    result = await db.execute(
+        select(MeetingTranscript)
+        .order_by(MeetingTranscript.created_at.desc())
+        .limit(min(limit, 100))
+    )
+    transcripts = result.scalars().all()
+    return {
+        "count": len(transcripts),
+        "transcripts": [
+            {
+                "id": str(t.id),
+                "title": t.title,
+                "meeting_date": t.meeting_date.isoformat() if t.meeting_date else None,
+                "source": t.source,
+                "summary": t.summary,
+                "action_items": t.action_items or [],
+                "decisions": t.decisions or [],
+                "blockers": t.blockers or [],
+                "attendees": t.attendees or [],
+                "tasks_created": t.tasks_created,
+                "project_id": str(t.project_id) if t.project_id else None,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in transcripts
+        ],
+    }
+
+
+@router.get("/transcripts/{transcript_id}", response_model=dict)
+async def get_transcript(
+    transcript_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get one meeting transcript including its full raw text."""
+    result = await db.execute(
+        select(MeetingTranscript).where(MeetingTranscript.id == transcript_id)
+    )
+    t = result.scalar_one_or_none()
+    if not t:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    return {
+        "id": str(t.id),
+        "title": t.title,
+        "meeting_date": t.meeting_date.isoformat() if t.meeting_date else None,
+        "source": t.source,
+        "summary": t.summary,
+        "action_items": t.action_items or [],
+        "decisions": t.decisions or [],
+        "blockers": t.blockers or [],
+        "attendees": t.attendees or [],
+        "tasks_created": t.tasks_created,
+        "project_id": str(t.project_id) if t.project_id else None,
+        "raw_transcript": t.raw_transcript,
+    }
+
+
+# ── Claude Code Bridge Chat ───────────────────────────────────────────────────
+
+class _ClaudeChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None  # Claude Code session id for follow-up turns
+
+
+@router.post("/claude-chat", response_model=dict)
+async def claude_chat(
+    payload: _ClaudeChatRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Forward a chat message to the local Claude Code bridge.
+
+    The bridge (claude-bridge/bridge.py) runs on the user's machine and executes
+    the query with Claude Code + the PulseOps MCP tools, so Claude can read
+    transcripts, create tasks, move projects, etc. Returns Claude's reply.
+    """
+    import os
+    import httpx
+
+    bridge_url = os.getenv("CLAUDE_BRIDGE_URL", "http://localhost:8765").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=5.0)) as client:
+            resp = await client.post(
+                f"{bridge_url}/chat",
+                json={
+                    "message": payload.message,
+                    "session_id": payload.session_id,
+                    "user_email": current_user.email,
+                },
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        raise HTTPException(
+            status_code=503,
+            detail="Claude bridge is not running. Start it with: python claude-bridge/bridge.py",
+        )
+    except httpx.HTTPStatusError as exc:
+        detail = "Claude bridge returned an error."
+        try:
+            detail = exc.response.json().get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail=detail)
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Claude took too long to respond. Try a simpler request.",
+        )
+
+
 # ── AI Summary Generation ─────────────────────────────────────────────────────
 
 @router.post("/summarize", response_model=dict)

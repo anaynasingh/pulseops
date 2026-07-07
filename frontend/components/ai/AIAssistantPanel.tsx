@@ -36,10 +36,22 @@ const QUICK_PROMPTS = [
   "What's due this week?",
 ];
 
+type Engine = "gpt" | "claude";
+
 export function AIAssistantPanel() {
   const { toggleAIAssistant } = useUIStore();
   const queryClient = useQueryClient();
   const STORAGE_KEY = "pulseops_chat_history";
+  const ENGINE_KEY = "pulseops_chat_engine";
+  const CLAUDE_SESSION_KEY = "pulseops_claude_session";
+  const [engine, setEngine] = useState<Engine>(() => {
+    if (typeof window === "undefined") return "gpt";
+    return (localStorage.getItem(ENGINE_KEY) as Engine) || "gpt";
+  });
+  const [claudeSession, setClaudeSession] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(CLAUDE_SESSION_KEY);
+  });
   const [messages, setMessages] = useState<Message[]>(() => {
     if (typeof window === "undefined") return [{ role: "assistant", content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }];
     try {
@@ -59,6 +71,17 @@ export function AIAssistantPanel() {
   }, [messages]);
 
   useEffect(() => {
+    try { localStorage.setItem(ENGINE_KEY, engine); } catch {}
+  }, [engine]);
+
+  useEffect(() => {
+    try {
+      if (claudeSession) localStorage.setItem(CLAUDE_SESSION_KEY, claudeSession);
+      else localStorage.removeItem(CLAUDE_SESSION_KEY);
+    } catch {}
+  }, [claudeSession]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -68,6 +91,29 @@ export function AIAssistantPanel() {
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setLoading(true);
+
+    if (engine === "claude") {
+      try {
+        const res = await aiApi.claudeChat(text, claudeSession);
+        if (res.session_id) setClaudeSession(res.session_id);
+        setMessages((m) => [...m, { role: "assistant", content: res.reply || "Claude finished but returned no text." }]);
+        // Claude may have created/moved anything — refresh workspace data
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
+        queryClient.invalidateQueries({ queryKey: ["my-dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      } catch (e: unknown) {
+        const err = e as { response?: { status?: number; data?: { detail?: string } } };
+        const detail = err.response?.data?.detail;
+        const content =
+          err.response?.status === 503
+            ? "Claude bridge isn't running on your machine. Start it with:\n\n`cd claude-bridge`\n`python bridge.py`"
+            : detail || "Something went wrong talking to Claude Code. Check the bridge terminal for errors.";
+        setMessages((m) => [...m, { role: "assistant", content }]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     try {
       // Build plain-text history from existing messages (skip initial greeting, cap at 20)
@@ -138,11 +184,20 @@ export function AIAssistantPanel() {
       <div className="flex items-center gap-2 px-4 py-3.5 border-b border-slate-800">
         <span className="text-indigo-400 ai-pulse">✦</span>
         <span className="text-sm font-semibold text-white flex-1">AI Assistant</span>
-        <span className="text-[10px] text-green-400 bg-green-900/30 border border-green-800/40 px-1.5 py-0.5 rounded">
-          GPT-4o
-        </span>
         <button
-          onClick={() => { const initial = [{ role: "assistant" as const, content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }]; setMessages(initial); try { localStorage.removeItem(STORAGE_KEY); } catch {} }}
+          onClick={() => setEngine((e) => (e === "gpt" ? "claude" : "gpt"))}
+          title="Click to switch AI engine"
+          className={cn(
+            "text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer",
+            engine === "claude"
+              ? "text-orange-500 bg-orange-500/10 border-orange-500/40 hover:bg-orange-500/20"
+              : "text-green-400 bg-green-900/30 border-green-800/40 hover:bg-green-900/50"
+          )}
+        >
+          {engine === "claude" ? "Claude Code" : "GPT-4o"} ⇄
+        </button>
+        <button
+          onClick={() => { const initial = [{ role: "assistant" as const, content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }]; setMessages(initial); setClaudeSession(null); try { localStorage.removeItem(STORAGE_KEY); } catch {} }}
           className="text-slate-600 hover:text-slate-400 transition-colors text-[10px]"
           title="Clear chat"
         >
@@ -231,7 +286,7 @@ export function AIAssistantPanel() {
         {loading && (
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-500 max-w-[90%]">
             <span className="ai-pulse text-indigo-400">✦</span>{" "}
-            Thinking…
+            {engine === "claude" ? "Claude is working on it… this can take a minute or two" : "Thinking…"}
           </div>
         )}
         <div ref={bottomRef} />
