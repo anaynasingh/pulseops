@@ -103,11 +103,14 @@ function Step3Content({ token: _jwt }: { token: string | null }) {
   }, []);
 
   const displayToken = apiKey ?? (loading ? "loading…" : "<your-token>");
-  const command = `claude mcp add task-planner \\\n  --transport sse \\\n  ${BACKEND}/mcp/sse \\\n  --header "X-Token: ${displayToken}"`;
+  // Single line so it pastes and runs cleanly in ANY shell. Backslash line
+  // continuations break in PowerShell (which Step 1 tells Windows users to
+  // use) and are fragile when clipboard whitespace is mangled.
+  const command = `claude mcp add task-planner --transport sse ${BACKEND}/mcp/sse --header "X-Token: ${displayToken}"`;
 
   const handleCopy = () => {
     if (!apiKey) return;
-    navigator.clipboard.writeText(command.replace(/\\\n  /g, " \\\n  "));
+    navigator.clipboard.writeText(command);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -130,7 +133,7 @@ function Step3Content({ token: _jwt }: { token: string | null }) {
           {copied ? "✓ Copied" : loading ? "…" : "Copy"}
         </button>
       </div>
-      <p className="text-sm text-slate-600">Restart Claude Code — you&apos;ll see <strong>task-planner</strong> in your MCP tools.</p>
+      <p className="text-sm text-slate-600">Then fully restart Claude Code and type <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">/mcp</code> — <strong>task-planner</strong> should show <strong>Connected</strong>.</p>
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
         <strong>Why a token?</strong> So Claude only sees YOUR tasks. The MCP server is hosted — nothing runs on your machine.
       </div>
