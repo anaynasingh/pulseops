@@ -21,35 +21,13 @@ from mcp.types import TextContent, Tool
 load_dotenv()
 
 API_URL = os.getenv("PULSEOPS_API_URL", "http://localhost:8001/api/v1").rstrip("/")
-EMAIL = os.getenv("PULSEOPS_EMAIL", "")
-PASSWORD = os.getenv("PULSEOPS_PASSWORD", "")
+API_KEY = os.getenv("PULSEOPS_API_KEY", "").strip()
 
 # ---------------------------------------------------------------------------
-# Auth state
+# Auth: long-lived per-user API key (grab it from PulseOps Settings -> MCP
+# Token). Sent as a bearer token on every request. Connect once — it never
+# expires, so there is no login step and no 401-refresh dance.
 # ---------------------------------------------------------------------------
-_token: str = ""
-
-
-async def _login(client: httpx.AsyncClient) -> str:
-    """Login and return a JWT token."""
-    resp = await client.post(
-        f"{API_URL}/auth/login",
-        json={"email": EMAIL, "password": PASSWORD},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    token = data.get("access_token") or data.get("token") or ""
-    if not token:
-        raise ValueError(f"No token in login response: {data}")
-    return token
-
-
-async def _get_token(client: httpx.AsyncClient) -> str:
-    global _token
-    if not _token:
-        _token = await _login(client)
-    return _token
 
 
 async def _request(
@@ -59,11 +37,9 @@ async def _request(
     params: dict | None = None,
     json_body: dict | None = None,
 ) -> Any:
-    """Make an authenticated request; re-login on 401."""
-    global _token
+    """Make an authenticated request using the long-lived API key."""
+    headers = {"Authorization": f"Bearer {API_KEY}"}
     async with httpx.AsyncClient() as client:
-        token = await _get_token(client)
-        headers = {"Authorization": f"Bearer {token}"}
         resp = await client.request(
             method,
             f"{API_URL}{path}",
@@ -72,18 +48,6 @@ async def _request(
             json=json_body,
             timeout=30,
         )
-        if resp.status_code == 401:
-            # Token expired — refresh and retry once
-            _token = await _login(client)
-            headers = {"Authorization": f"Bearer {_token}"}
-            resp = await client.request(
-                method,
-                f"{API_URL}{path}",
-                headers=headers,
-                params=params,
-                json=json_body,
-                timeout=30,
-            )
         return resp
 
 
@@ -787,6 +751,13 @@ async def _get_gantt(args: dict) -> str:
 # Entry point
 # ---------------------------------------------------------------------------
 async def main():
+    if not API_KEY:
+        print(
+            "WARNING: PULSEOPS_API_KEY not set — every request will 401. "
+            "Grab your key from PulseOps Settings -> MCP Token and set "
+            "PULSEOPS_API_KEY in your .env or Claude settings.",
+            file=sys.stderr,
+        )
     print("PulseOps MCP server ready", file=sys.stderr)
     async with stdio_server() as (read_stream, write_stream):
         await server.run(

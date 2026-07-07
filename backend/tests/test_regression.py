@@ -676,3 +676,102 @@ class TestIntakeConfirm:
         data = r.json()
         assert data["item_type"] == "project"
         assert data["project"]["owner_id"] == caller_id
+
+
+# ── 10. API-key auth — long-lived bearer credential ──────────────────────────
+#
+# Verifies get_current_user accepts the permanent User.api_key as a bearer token
+# (the "connect once" MCP credential — see deps.py). Seeds two dedicated
+# synthetic users DIRECTLY in the DB (no JWT, no dead /auth/login) with known
+# api_keys, then cleans them up in fixture teardown. Marker-gated: only rows with
+# these exact synthetic `@pulseops.test` emails are ever created or deleted — a
+# real user is never mutated. Uses the same `_run` + AsyncSessionLocal pattern as
+# the intake fixtures above (never asyncio.run()).
+
+_APIKEY_ACTIVE_EMAIL = "_reg_apikey_active@pulseops.test"
+_APIKEY_DISABLED_EMAIL = "_reg_apikey_disabled@pulseops.test"
+_APIKEY_ACTIVE_KEY = "_reg_apikey_active_" + "k" * 24    # 43 chars, clearly synthetic
+_APIKEY_DISABLED_KEY = "_reg_apikey_disabled_" + "k" * 22  # 43 chars, clearly synthetic
+
+
+async def _seed_api_key_users_async():
+    from sqlalchemy import select
+    from app.db.session import AsyncSessionLocal
+    from app.models.models import User, UserRole
+    async with AsyncSessionLocal() as db:
+        for email, key, active in (
+            (_APIKEY_ACTIVE_EMAIL, _APIKEY_ACTIVE_KEY, True),
+            (_APIKEY_DISABLED_EMAIL, _APIKEY_DISABLED_KEY, False),
+        ):
+            existing = (await db.execute(
+                select(User).where(User.email == email)
+            )).scalar_one_or_none()
+            if existing is None:
+                # create-only: never overwrite a pre-existing row's key/is_active
+                db.add(User(
+                    name="Regression ApiKey User",
+                    email=email,
+                    role=UserRole.contributor,
+                    is_active=active,
+                    api_key=key,
+                ))
+        await db.commit()
+
+
+async def _cleanup_api_key_users_async():
+    from sqlalchemy import delete
+    from app.db.session import AsyncSessionLocal
+    from app.models.models import User
+    async with AsyncSessionLocal() as db:
+        # marker-gated: only our exact synthetic emails
+        await db.execute(delete(User).where(
+            User.email.in_([_APIKEY_ACTIVE_EMAIL, _APIKEY_DISABLED_EMAIL])
+        ))
+        await db.commit()
+
+
+@pytest.fixture(scope="module")
+def seeded_api_keys():
+    """Seeds an active + a disabled synthetic user with known api_keys; cleans up after."""
+    _run(_cleanup_api_key_users_async())   # clear any stale rows from a prior aborted run
+    _run(_seed_api_key_users_async())
+    yield {"active": _APIKEY_ACTIVE_KEY, "disabled": _APIKEY_DISABLED_KEY}
+    _run(_cleanup_api_key_users_async())
+
+
+class TestApiKeyAuth:
+    def test_api_key_authenticates(self, seeded_api_keys):
+        r = CLIENT.get(f"{BASE}/auth/me", headers=auth(seeded_api_keys["active"]))
+        assert r.status_code == 200, r.text
+        assert r.json()["email"] == _APIKEY_ACTIVE_EMAIL
+
+    def test_api_key_works_on_protected_endpoint(self, seeded_api_keys):
+        # Proves the fallback reaches real business endpoints via get_current_user,
+        # not just /auth/me.
+        r = CLIENT.get(f"{BASE}/projects/", headers=auth(seeded_api_keys["active"]))
+        assert r.status_code == 200, r.text
+
+    def test_bad_token_rejected(self, seeded_api_keys):
+        r = CLIENT.get(f"{BASE}/auth/me", headers=auth("nonexistent_" + "x" * 31))
+        assert r.status_code == 401
+
+    def test_empty_token_rejected(self):
+        # FastAPI's bearer parser rejects an empty credential before the api_key
+        # query is reached — assert only the 401 outcome, not the fallback path.
+        r = CLIENT.get(f"{BASE}/auth/me", headers={"Authorization": "Bearer "})
+        assert r.status_code == 401
+
+    def test_no_token_rejected(self):
+        r = CLIENT.get(f"{BASE}/auth/me")
+        assert r.status_code == 401
+
+    def test_disabled_user_key_rejected(self, seeded_api_keys):
+        # A valid, matching key whose user is is_active=False must 401.
+        r = CLIENT.get(f"{BASE}/auth/me", headers=auth(seeded_api_keys["disabled"]))
+        assert r.status_code == 401
+
+    def test_jwt_shaped_invalid_token_rejected(self):
+        # A JWT-shaped (3-segment) but undecodable token must 401 WITHOUT falling
+        # through to the api_key lookup (Gemini HIGH: expired/invalid JWTs).
+        r = CLIENT.get(f"{BASE}/auth/me", headers=auth("aaaa.bbbb.cccc"))
+        assert r.status_code == 401

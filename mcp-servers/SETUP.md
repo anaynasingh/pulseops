@@ -16,15 +16,14 @@ cd mcp-servers/pulseops
 pip install -r requirements.txt
 ```
 
-**2. Configure credentials**
+**2. Configure your API key**
 ```
 cp .env.example .env
 ```
-Open `.env` and fill in your PulseOps email and password:
+Grab your personal API key from PulseOps (**Settings → MCP Token**) and paste it into `.env`. This key is long-lived — you set it once and never have to reconnect:
 ```
 PULSEOPS_API_URL=http://localhost:8001/api/v1
-PULSEOPS_EMAIL=you@company.com
-PULSEOPS_PASSWORD=yourpassword
+PULSEOPS_API_KEY=your-api-key-from-pulseops-settings
 ```
 
 **3. Test the server**
@@ -34,7 +33,7 @@ python server.py
 You should see: `PulseOps MCP server ready` printed to the terminal. Press Ctrl+C to stop.
 
 **4. Use with Claude Code**
-The server is pre-configured in `.claude/settings.json`. Claude Code will auto-start it. You still need to fill in `PULSEOPS_EMAIL` and `PULSEOPS_PASSWORD` in the settings.json env block (or use the .env file approach above).
+Copy the `pulseops` server block from `mcp-servers/claude-settings.json` into your own `.claude/settings.json` (that is the file Claude Code actually reads — it is user-local and gitignored). Claude Code will auto-start the server. Fill in `PULSEOPS_API_KEY` in that env block (or use the `.env` file approach above).
 
 ---
 
@@ -132,8 +131,7 @@ Both servers are registered in `.claude/settings.json`. Before using them, open 
       "args": ["mcp-servers/pulseops/server.py"],
       "env": {
         "PULSEOPS_API_URL": "http://localhost:8001/api/v1",
-        "PULSEOPS_EMAIL": "you@company.com",
-        "PULSEOPS_PASSWORD": "yourpassword"
+        "PULSEOPS_API_KEY": "your-api-key-from-pulseops-settings"
       }
     },
     "m365": {
@@ -174,7 +172,7 @@ Claude will automatically call the right MCP tools behind the scenes.
 | Problem | Fix |
 |---|---|
 | `ModuleNotFoundError: No module named 'mcp'` | Run `pip install -r requirements.txt` in the server folder |
-| `401 Unauthorized` from PulseOps | Check your email/password in `.env` or `settings.json` |
+| `401 Unauthorized` from PulseOps | Re-grab your API key from PulseOps Settings → MCP Token and update `PULSEOPS_API_KEY` in `.env` or `settings.json` |
 | `M365_CLIENT_ID is not set` | Copy `.env.example` to `.env` and fill in your Azure app ID |
 | Device code flow shows an error | Make sure "Allow public client flows" is enabled in Azure |
 | Token expired | Delete `~/.pulseops_m365_token.json` and re-run `python server.py` to re-authenticate |
