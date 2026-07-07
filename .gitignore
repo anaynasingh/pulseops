@@ -49,3 +49,9 @@ AIGILE_CORRECTIONS.md.aigile-backup
 .understand-anything/intermediate/
 .understand-anything/diff-overlay.json
 .understand-anything/tmp/
+!.aigile/probe-rounds
+!.aigile/probe-rounds/**
+!.aigile/retros
+!.aigile/retros/**
+!.aigile/risk-tiers.tsv
+!.aigile/model-roles.yaml
