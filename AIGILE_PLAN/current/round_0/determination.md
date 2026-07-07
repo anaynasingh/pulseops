@@ -1,0 +1,14 @@
+# Round 0 Determination — Codex plan challenge dispositions
+
+All 6 findings absorbed as implementation-spec tightenings. None reject the design; none change streams/scope; none require a new Orchestrator decision. No re-spawn of the Plan agent — edits applied directly to the plan by the orchestrator-assistant. Codex NOT re-run: changes are spec clarifications within the already-reviewed design, not new architecture.
+
+| ID | Sev | Finding | Disposition | Rationale |
+|----|-----|---------|-------------|-----------|
+| C1 | MED | Stream B not runtime-independent | BUILD-NOTE | Both streams built AND shipped together this burst. Add explicit rule: Stream A (backend) must be live before/with Stream B's config reaches users. Integration gate already verifies A first. |
+| C2 | HIGH | Shared dev DB seeding unsafe | ABSORB-PLAN | Mirror the existing `_seed_*_async`/`_cleanup_async` pattern (test_regression.py:342-387): unique synthetic emails with a `_reg` marker, only ever create/delete OUR OWN rows (marker-gated), never mutate a pre-existing row. Generate a per-run unique key or a clearly-synthetic constant; never overwrite an existing user's key. |
+| C3 | HIGH | JWT valid-but-bad not preserved | ABSORB-PLAN | Refine deps.py logic: `payload = decode_token(token)`. If `payload is not None` → token IS a JWT; handle ENTIRELY in the JWT branch (missing sub → 401, missing/inactive user → 401), NO fallback. Only when `payload is None` (not a JWT) → try api_key. This preserves exact prior JWT behavior. Add a code comment marking the no-fallback-on-valid-JWT invariant. |
+| C4 | MED | api_key cache claim false | ABSORB-PLAN | Correct the plan: the api_key path does ONE DB lookup per request (cannot read the user_id-keyed cache before resolving the user). It still POPULATES `_user_cache[str(user.id)]` so a later JWT request for the same user benefits. Per-request DB hit is acceptable for MCP call volumes; token-keyed caching deferred (would store keys in a new cache — out of scope). |
+| C5 | HIGH | Async fixture loop/pool risk | ABSORB-PLAN | Use the EXISTING `_run(coro)` helper + `AsyncSessionLocal` async helpers (test_regression.py:342-387), NOT `asyncio.run()`. Model the api_key seed/cleanup fixture directly on `_seed_intake_async`/`_cleanup_async`. Drop the seed_june11.py comparison. |
+| C6 | LOW | claude-settings.json path ambiguity | BUILD-NOTE | `mcp-servers/claude-settings.json` is the EXAMPLE/TEMPLATE users copy into their own `.claude/settings.json`; SETUP.md already documents this. Editing the template is correct. Note in SETUP.md that the live file is the user's `.claude/settings.json` (user-local, gitignored, out of scope). Verify no tracked `.claude/settings.json` exists in-repo before finalizing. |
+
+**Empty-token test correction (from Codex confirmed-check):** FastAPI rejects empty/whitespace `Bearer` before the query — `test_empty_token_rejected` asserts 401 only, not the internal fallback path.
