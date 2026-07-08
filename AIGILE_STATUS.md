@@ -4,11 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Next action:** Burst complete - /clear when ready, next session runs /ag-plan.
-**Last updated:** 2026-07-07 (mcp-longlived-apikey shipped to P33-AI master via PR #17, merge 637046c; prod deploy triggered; Gemini 2 findings fixed pre-merge)
+**Phase:** Building
+**Active burst:** claude-bridge-live
+**Burst base:** bb3c8d20c428fae00057b8363a1f5f467396516e
+**Plan reference:** AIGILE_PLAN/current/ (round_3 plan approved; iteration receipts + HAV feedback log per v9.1.0)
+**Next action:** Build: Stream A (bridge.py binding/env + m365 wiring + headless guard) → Stream B (Dockerfile + railway.json + .dockerignore) → Stream C (README runbook + .env.example + CHARTER amendments), then integration gate docker matrix.
+**Last updated:** 2026-07-08 (claude-bridge-live plan approved: ag-challenge PASS_CLEAN R3 + Codex "Plan is ready" R3, thread 019f3ce5-fbfb-7311-b016-7531c8709799)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -33,13 +34,29 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream A (backend) builders:** claude
-**Stream A (backend) handoff head:** 66e2a73
-**Stream A (backend) status:** COMPLETE
+**Stream A executor:** orchestrator-direct
+**Stream A dispatch:** inline
+**Stream A risk-tier:** 2
+**Stream A tier-basis:** declared
+**Stream A status:** ASSIGNED
+**Stream A artifact:** None
+**Stream A handoff head:** None
 
-**Stream B (mcp-server+docs) builders:** claude
-**Stream B (mcp-server+docs) handoff head:** a717fb3
-**Stream B (mcp-server+docs) status:** COMPLETE
+**Stream B executor:** orchestrator-direct
+**Stream B dispatch:** inline
+**Stream B risk-tier:** 2
+**Stream B tier-basis:** declared
+**Stream B status:** ASSIGNED
+**Stream B artifact:** None
+**Stream B handoff head:** None
+
+**Stream C executor:** orchestrator-direct
+**Stream C dispatch:** inline
+**Stream C risk-tier:** 1
+**Stream C tier-basis:** declared
+**Stream C status:** ASSIGNED
+**Stream C artifact:** None
+**Stream C handoff head:** None
 
 ## Gemini Reviews
 

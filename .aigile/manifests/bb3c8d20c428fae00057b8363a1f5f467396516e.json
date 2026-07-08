@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.1.0",
+  "burst_sha": "bb3c8d20c428fae00057b8363a1f5f467396516e",
+  "project_slug": "pulseops",
+  "burst_label": null,
+  "orchestrator": {
+    "name": "Anayna Singh",
+    "email": "anayna.singh@prospect33.com"
+  },
+  "status": "in-flight",
+  "started_at": "2026-07-08T03:43:07Z",
+  "finalised_at": null,
+  "phases": [
+    {
+      "name": "Building",
+      "entered_at": "2026-07-08T03:43:07Z"
+    }
+  ],
+  "streams": [],
+  "stream_dependency_edges": [],
+  "reviews": {
+    "codex": null,
+    "gemini": null
+  },
+  "contributors": [],
+  "diff_stat": null
+}
