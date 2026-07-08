@@ -17,7 +17,7 @@ last_promoted: 2026-06-03
 - Python 3.11+ backend (FastAPI, SQLAlchemy async, pgvector)
 - Next.js 14+ App Router frontend (TypeScript, Tailwind, dnd-kit)
 - PostgreSQL with pgvector for all persistence and semantic search
-- OpenRouter (GPT-4o) for all LLM inference — no direct OpenAI API calls
+- OpenRouter (GPT-4o) for LLM inference — no direct OpenAI API calls. Claude-via-claude-bridge (Claude Code subscription OAuth token; no Anthropic API key) is a sanctioned second inference path [amended 2026-07-08, claude-bridge-live]
 - HuggingFace `all-MiniLM-L6-v2` (384-dim) for embeddings — free tier
 - JWT auth with bearer tokens
 - All schema changes via numbered migration files — no ad-hoc ALTER TABLE
@@ -25,7 +25,7 @@ last_promoted: 2026-06-03
 
 ## Constraints
 
-- [2026-06-03] OpenRouter API key required for all AI features — no offline fallback
+- [2026-06-03] OpenRouter API key required for the GPT-4o AI features — no offline fallback. The Claude assistant path authenticates via `CLAUDE_CODE_OAUTH_TOKEN` (subscription, second sanctioned inference path) [amended 2026-07-08, claude-bridge-live]
 - [2026-06-03] Supabase required for pgvector — local Postgres without pgvector extension will not work for semantic search
 - [2026-06-03] Frontend uses npm (not bun) due to Windows path issues with postinstall scripts — use `npm install --ignore-scripts`
 
@@ -61,6 +61,6 @@ last_promoted: 2026-06-03
 - All 8 Kanban columns render and persist drag-and-drop order
 - AI Intake produces a structured card with >80% accuracy on test inputs
 - Semantic search returns relevant results for natural language queries
-- Meeting transcript → task extraction completes in <10 seconds
+- Meeting transcript → task extraction completes in <10 seconds (applies to the GPT-4o extraction pipeline; the interactive Claude assistant path is exempt — multi-step tool runs legitimately take longer)
 - Auth flow (signup, login, JWT) works end-to-end
 - API docs at /docs fully reflect all live endpoints
