@@ -36,11 +36,18 @@ CLIENT_SECRET = os.getenv("M365_CLIENT_SECRET", "")  # optional
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Mail.Read", "Calendars.Read", "Mail.ReadWrite"]
-TOKEN_CACHE_PATH = Path.home() / ".pulseops_m365_token.json"
+TOKEN_CACHE_PATH = Path(os.getenv("M365_TOKEN_CACHE") or str(Path.home() / ".pulseops_m365_token.json"))
+# Device flow blocks waiting for a browser login — only allowed for the one-time
+# interactive cache seeding, never in headless/server context.
+ALLOW_DEVICE_FLOW = os.getenv("M365_ALLOW_DEVICE_FLOW", "") == "1"
 
 # ---------------------------------------------------------------------------
 # MSAL auth
 # ---------------------------------------------------------------------------
+class M365AuthError(Exception):
+    """No usable cached token and interactive auth is not allowed in this context."""
+
+
 _token_cache = msal.SerializableTokenCache()
 
 
@@ -84,7 +91,16 @@ def _get_token() -> str:
             _save_cache()
             return result["access_token"]
 
-    # Fall back to device code flow
+    # Silent acquisition failed: empty cache, or expired/revoked/invalid refresh
+    # token. Device flow blocks on a browser login, so in headless/server context
+    # fail fast instead of hanging the caller until its timeout.
+    if not ALLOW_DEVICE_FLOW:
+        raise M365AuthError(
+            "M365 token cache missing or expired — re-seed it per the runbook "
+            "(run once with M365_ALLOW_DEVICE_FLOW=1 and place the cache at M365_TOKEN_CACHE)."
+        )
+
+    # Fall back to device code flow (interactive seeding only)
     flow = app.initiate_device_flow(scopes=SCOPES)
     if "user_code" not in flow:
         raise RuntimeError(f"Failed to create device flow: {flow.get('error_description', flow)}")
@@ -317,6 +333,8 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
         result = await _dispatch(name, arguments)
+    except M365AuthError as e:
+        result = _error(str(e))
     except httpx.HTTPStatusError as e:
         result = _error(str(e), e.response.status_code)
     except Exception as e:

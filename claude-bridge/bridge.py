@@ -34,10 +34,19 @@ load_dotenv(BRIDGE_DIR / ".env")
 
 REPO_ROOT = BRIDGE_DIR.parent
 PULSEOPS_MCP_SERVER = REPO_ROOT / "mcp-servers" / "pulseops" / "server.py"
+M365_MCP_SERVER = REPO_ROOT / "mcp-servers" / "m365" / "server.py"
 MCP_CONFIG_PATH = BRIDGE_DIR / ".mcp-config.json"   # generated at startup (gitignored)
 WORKDIR = BRIDGE_DIR / "workdir"                    # neutral cwd so no project CLAUDE.md is loaded
 
-BRIDGE_PORT = int(os.getenv("BRIDGE_PORT", "8765"))
+# Loopback by default: /chat is unauthenticated, so a bare local run must not be
+# LAN-reachable. The Docker image sets BRIDGE_HOST=:: (Railway private networking
+# is IPv6-only and unreachable on an IPv4-only bind).
+BRIDGE_HOST = os.getenv("BRIDGE_HOST", "127.0.0.1")
+_PORT_RAW = os.getenv("PORT", os.getenv("BRIDGE_PORT", "8765"))
+try:
+    BRIDGE_PORT = int(_PORT_RAW)
+except ValueError:
+    raise SystemExit(f"Invalid PORT/BRIDGE_PORT value {_PORT_RAW!r} — must be an integer")
 CLAUDE_TIMEOUT_SECONDS = int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "540"))
 MAX_TURNS = os.getenv("CLAUDE_MAX_TURNS", "40")
 PYTHON_CMD = os.getenv("PYTHON_CMD", sys.executable or "python")
@@ -50,6 +59,10 @@ You have PulseOps MCP tools to act on the user's real workspace:
 - create_task / update_task
 - list_transcripts / get_transcript / analyze_transcript  (meeting transcripts)
 - get_dashboard / search_projects / get_gantt / process_email
+
+You can also read the user's real Outlook mail and calendar via the m365 MCP tools:
+- list_emails / get_email / search_emails / get_unread_emails / mark_email_read
+- list_calendar_events / get_my_profile
 
 Rules:
 - When the user asks you to do something (e.g. "read meeting transcripts and create tasks"),
@@ -124,6 +137,25 @@ def write_mcp_config() -> None:
             }
         }
     }
+    m365_client_id = os.getenv("M365_CLIENT_ID", "").strip()
+    if m365_client_id:
+        m365_env = {
+            "M365_CLIENT_ID": m365_client_id,
+            "M365_TENANT_ID": os.getenv("M365_TENANT_ID", "common"),
+        }
+        m365_secret = os.getenv("M365_CLIENT_SECRET", "").strip()
+        if m365_secret:
+            m365_env["M365_CLIENT_SECRET"] = m365_secret
+        m365_cache = os.getenv("M365_TOKEN_CACHE", "").strip()
+        if m365_cache:
+            m365_env["M365_TOKEN_CACHE"] = m365_cache
+        config["mcpServers"]["m365"] = {
+            "command": PYTHON_CMD,
+            "args": [str(M365_MCP_SERVER)],
+            "env": m365_env,
+        }
+    else:
+        print("WARNING: M365_CLIENT_ID not set — m365 MCP server disabled (Outlook email/calendar tools unavailable)")
     MCP_CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
@@ -160,7 +192,7 @@ def chat(payload: ChatRequest) -> dict:
         "--output-format", "json",
         "--mcp-config", str(MCP_CONFIG_PATH),
         "--strict-mcp-config",
-        "--allowedTools", "mcp__pulseops",
+        "--allowedTools", "mcp__pulseops,mcp__m365",
         "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task",
         "--append-system-prompt", system_prompt,
         "--max-turns", MAX_TURNS,
@@ -224,7 +256,7 @@ if __name__ == "__main__":
 
     WORKDIR.mkdir(exist_ok=True)
     write_mcp_config()
-    print(f"PulseOps Claude Bridge ready on http://localhost:{BRIDGE_PORT}")
+    print(f"PulseOps Claude Bridge ready on http://{BRIDGE_HOST}:{BRIDGE_PORT}")
     print(f"  Claude CLI : {' '.join(CLAUDE_CMD)}")
     print(f"  MCP server : {PULSEOPS_MCP_SERVER}")
-    uvicorn.run(app, host="127.0.0.1", port=BRIDGE_PORT)
+    uvicorn.run(app, host=BRIDGE_HOST, port=BRIDGE_PORT)
