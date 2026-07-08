@@ -1,0 +1,11 @@
+# Build context for claude-bridge/Dockerfile is the repo root — keep it lean and
+# keep secrets/state out of the image. Do NOT exclude mcp-servers/ or any
+# requirements.txt: the Dockerfile COPY/pip steps depend on them.
+.git/
+frontend/node_modules/
+**/venv/
+**/.venv/
+**/__pycache__/
+**/.env
+claude-bridge/.mcp-config.json
+claude-bridge/workdir/
