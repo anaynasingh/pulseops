@@ -705,6 +705,10 @@ async def claude_chat(
     import httpx
 
     bridge_url = os.getenv("CLAUDE_BRIDGE_URL", "http://localhost:8765").rstrip("/")
+    # Shared secret for a remote (Railway) bridge. Must match BRIDGE_SECRET on
+    # the bridge service. Empty for a local bridge that runs without a secret.
+    bridge_secret = os.getenv("BRIDGE_SECRET", "").strip()
+    headers = {"X-Bridge-Secret": bridge_secret} if bridge_secret else {}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=5.0)) as client:
             resp = await client.post(
@@ -714,6 +718,7 @@ async def claude_chat(
                     "session_id": payload.session_id,
                     "user_email": current_user.email,
                 },
+                headers=headers,
             )
             resp.raise_for_status()
             return resp.json()

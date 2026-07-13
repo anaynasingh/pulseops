@@ -57,3 +57,43 @@ header to switch from **GPT-4o** to **Claude Code**. Then try:
 - Claude requests take longer than GPT-4o replies (it's doing real multi-step
   work) — 30 seconds to a few minutes is normal.
 - If the panel says the bridge is not running, start step 3 above.
+
+## Deploy to Railway (always-on, no laptop needed)
+
+The bridge can run as its own Railway service so PulseOps works when your machine
+is off. It authenticates Claude with your **subscription** (an OAuth token), not
+an API key.
+
+**1. Mint a subscription token (on your machine):**
+```
+claude setup-token
+```
+Copy the token it prints (valid ~1 year).
+
+**2. Create the Railway service:**
+- New service → Deploy from the PulseOps repo.
+- Settings → Build: **Dockerfile Path** = `claude-bridge/Dockerfile`.
+  Leave **Root Directory** empty (the build context must be the repo root — the
+  image copies both `claude-bridge/` and `mcp-servers/`).
+
+**3. Set the service variables:**
+| Variable | Value |
+|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | the token from step 1 |
+| `PULSEOPS_API_KEY` | your personal MCP token (`GET /api/v1/auth/api-key`) |
+| `PULSEOPS_API_URL` | `https://<backend>.up.railway.app/api/v1` |
+| `BRIDGE_SECRET` | a long random string |
+
+> **Do NOT set `ANTHROPIC_API_KEY`** on this service — it overrides the OAuth
+> token and switches to per-token API billing. `BRIDGE_HOST=0.0.0.0` and `$PORT`
+> are handled by the Dockerfile/code automatically.
+
+**4. Point the backend at the bridge** (on the PulseOps backend service):
+| Variable | Value |
+|---|---|
+| `CLAUDE_BRIDGE_URL` | the bridge's private URL, e.g. `http://<bridge>.railway.internal:$PORT` |
+| `BRIDGE_SECRET` | **same value** as on the bridge service |
+
+**5. Verify:** open `https://<bridge>.up.railway.app/health` → `{"status":"ok"}`,
+then in PulseOps switch the panel to **Claude Code** and try
+"read the meeting transcripts and create tasks".

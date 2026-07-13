@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 BRIDGE_DIR = Path(__file__).resolve().parent
@@ -37,7 +37,15 @@ PULSEOPS_MCP_SERVER = REPO_ROOT / "mcp-servers" / "pulseops" / "server.py"
 MCP_CONFIG_PATH = BRIDGE_DIR / ".mcp-config.json"   # generated at startup (gitignored)
 WORKDIR = BRIDGE_DIR / "workdir"                    # neutral cwd so no project CLAUDE.md is loaded
 
-BRIDGE_PORT = int(os.getenv("BRIDGE_PORT", "8765"))
+# Railway (and most PaaS) inject the port to bind as $PORT; fall back to
+# BRIDGE_PORT for local dev.
+BRIDGE_PORT = int(os.getenv("PORT") or os.getenv("BRIDGE_PORT", "8765"))
+# Host to bind. Locally 127.0.0.1 keeps the bridge off the network; on Railway
+# it must be 0.0.0.0 so the private network can reach it (set BRIDGE_HOST there).
+BRIDGE_HOST = os.getenv("BRIDGE_HOST", "127.0.0.1")
+# Optional shared secret. When set, callers (the PulseOps backend) must send it
+# as the X-Bridge-Secret header. Leave empty for local dev.
+BRIDGE_SECRET = os.getenv("BRIDGE_SECRET", "").strip()
 CLAUDE_TIMEOUT_SECONDS = int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "540"))
 MAX_TURNS = os.getenv("CLAUDE_MAX_TURNS", "40")
 PYTHON_CMD = os.getenv("PYTHON_CMD", sys.executable or "python")
@@ -146,8 +154,24 @@ def health() -> dict:
 
 
 @app.post("/chat")
-def chat(payload: ChatRequest) -> dict:
-    """Run one chat turn through Claude Code headless mode."""
+def chat(
+    payload: ChatRequest,
+    x_bridge_secret: Optional[str] = Header(default=None),
+) -> dict:
+    """Run one chat turn through Claude Code headless mode.
+
+    When BRIDGE_SECRET is configured (e.g. on Railway), the caller must present
+    it in the X-Bridge-Secret header. This is the only auth on the endpoint, so
+    the bridge should also be kept on a private network.
+    """
+    if BRIDGE_SECRET and x_bridge_secret != BRIDGE_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid or missing bridge secret.")
+    return _do_chat(payload)
+
+
+def _do_chat(payload: ChatRequest) -> dict:
+    """Execute one Claude turn. Split from the endpoint so the resume-retry can
+    recurse without re-checking the (already-verified) shared secret."""
     if not payload.message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
 
@@ -160,6 +184,11 @@ def chat(payload: ChatRequest) -> dict:
         "--output-format", "json",
         "--mcp-config", str(MCP_CONFIG_PATH),
         "--strict-mcp-config",
+        # dontAsk = auto-approve only the pre-approved tools below and deny the
+        # rest. REQUIRED in headless mode: without it, an MCP permission prompt
+        # has no one to answer and aborts the run (fine on a dev machine that
+        # already trusts the tools, but fatal in a fresh container).
+        "--permission-mode", "dontAsk",
         "--allowedTools", "mcp__pulseops",
         "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task",
         "--append-system-prompt", system_prompt,
@@ -193,7 +222,7 @@ def chat(payload: ChatRequest) -> dict:
         # A stale/unknown session id makes --resume fail; retry once fresh.
         if payload.session_id:
             retry = ChatRequest(message=payload.message, user_email=payload.user_email)
-            return chat(retry)
+            return _do_chat(retry)
         raise HTTPException(status_code=502, detail=f"Claude CLI failed: {stderr_tail}")
 
     try:
@@ -224,7 +253,8 @@ if __name__ == "__main__":
 
     WORKDIR.mkdir(exist_ok=True)
     write_mcp_config()
-    print(f"PulseOps Claude Bridge ready on http://localhost:{BRIDGE_PORT}")
+    print(f"PulseOps Claude Bridge ready on http://{BRIDGE_HOST}:{BRIDGE_PORT}")
     print(f"  Claude CLI : {' '.join(CLAUDE_CMD)}")
     print(f"  MCP server : {PULSEOPS_MCP_SERVER}")
-    uvicorn.run(app, host="127.0.0.1", port=BRIDGE_PORT)
+    print(f"  Auth       : {'shared secret required' if BRIDGE_SECRET else 'OPEN (no secret set)'}")
+    uvicorn.run(app, host=BRIDGE_HOST, port=BRIDGE_PORT)
