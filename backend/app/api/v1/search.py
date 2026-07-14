@@ -23,7 +23,11 @@ async def keyword_search(
 
     projects_res = await db.execute(
         select(Project)
-        .options(selectinload(Project.owner), selectinload(Project.tasks),
+        .options(selectinload(Project.owner),
+                 # eager-load each task's assignee too — ProjectOut serializes
+                 # nested tasks, and a lazy task.assignee load here throws
+                 # MissingGreenlet under async SQLAlchemy (500).
+                 selectinload(Project.tasks).selectinload(Task.assignee),
                  selectinload(Project.insights), selectinload(Project.health_records))
         .where(or_(Project.title.ilike(like), Project.description.ilike(like)))
         .limit(20)
