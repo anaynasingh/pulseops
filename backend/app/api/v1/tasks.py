@@ -104,6 +104,31 @@ async def create_task(
     current_user: User = Depends(require_writer),
 ):
     data = payload.model_dump(exclude_unset=True)
+    # Resolve an email/name assignee to a user id (so callers can assign without
+    # knowing the UUID). Explicit assigned_to wins if both are given.
+    assignee_str = data.pop("assignee", None)
+    if assignee_str and not data.get("assigned_to"):
+        assignee_str = assignee_str.strip()
+        res = await db.execute(select(User).where(User.email.ilike(assignee_str)))
+        user = res.scalar_one_or_none()
+        if user is None:
+            res = await db.execute(
+                select(User).where(User.name.ilike(f"%{assignee_str}%")).limit(2)
+            )
+            matches = res.scalars().all()
+            if len(matches) == 1:
+                user = matches[0]
+            elif len(matches) > 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Assignee '{assignee_str}' matches multiple users — use their exact email.",
+                )
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not find a user matching assignee '{assignee_str}'. Use their exact email.",
+            )
+        data["assigned_to"] = user.id
     # No task is left unassigned: default the assignee to its creator.
     if "assigned_to" not in data or data["assigned_to"] is None:
         data["assigned_to"] = current_user.id

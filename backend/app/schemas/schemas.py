@@ -182,6 +182,10 @@ class TaskCreate(BaseModel):
     status: ProjectStatus = ProjectStatus.todo
     priority: PriorityLevel = PriorityLevel.medium
     assigned_to: Optional[UUID] = None
+    # Convenience: an email (preferred) or name the server resolves to a user and
+    # uses to populate assigned_to. Lets callers (e.g. the MCP/assistant) assign by
+    # email/name without first looking up the user's UUID.
+    assignee: Optional[str] = None
     due_date: Optional[date] = None
     is_private: bool = False
     scheduled_at: Optional[datetime] = None
