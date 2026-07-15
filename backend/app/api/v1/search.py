@@ -36,7 +36,9 @@ async def keyword_search(
 
     tasks_res = await db.execute(
         select(Task)
-        .options(selectinload(Task.assignee))
+        # TaskOut serializes both assignee and project — eager-load both, or
+        # Pydantic lazy-loads them in async context (MissingGreenlet → 500).
+        .options(selectinload(Task.assignee), selectinload(Task.project))
         .where(or_(Task.title.ilike(like), Task.description.ilike(like)))
         .limit(20)
     )

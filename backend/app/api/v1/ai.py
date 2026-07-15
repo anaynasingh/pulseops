@@ -610,7 +610,7 @@ async def create_tasks_from_transcript(
     for t in created_tasks:
         await db.refresh(t)
         res = await db.execute(
-            select(Task).options(selectinload(Task.assignee)).where(Task.id == t.id)
+            select(Task).options(selectinload(Task.assignee), selectinload(Task.project)).where(Task.id == t.id)
         )
         task_outs.append(TaskOut.model_validate(res.scalar_one()))
 
@@ -1431,7 +1431,7 @@ async def confirm_tasks(
     for t in created_tasks:
         await db.refresh(t)
         res = await db.execute(
-            select(Task).options(selectinload(Task.assignee)).where(Task.id == t.id)
+            select(Task).options(selectinload(Task.assignee), selectinload(Task.project)).where(Task.id == t.id)
         )
         task_outs.append(TaskOut.model_validate(res.scalar_one()))
 
