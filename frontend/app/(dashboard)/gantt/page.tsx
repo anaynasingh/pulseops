@@ -2,17 +2,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { analyticsApi } from "@/lib/api";
-import { useUIStore } from "@/lib/store";
+import { useUIStore, useAuthStore } from "@/lib/store";
 import { Header } from "@/components/layout/Header";
 import { useMemo, useRef, useState, useCallback } from "react";
 
 interface GanttTask {
   id: string; title: string; type: "task";
-  assignee?: string | null; start_date: string; end_date: string;
+  assignee?: string | null; assignee_email?: string | null; start_date: string; end_date: string;
   is_completed: boolean; priority: string;
 }
 interface GanttProject {
-  id: string; title: string; type: "project"; status: string; priority: string;
+  id: string; title: string; type: "project"; owner_email?: string | null; status: string; priority: string;
   start_date: string; end_date: string; progress: number; subtasks: GanttTask[];
 }
 interface GanttData { items: GanttProject[]; min_date: string; max_date: string; }
@@ -69,16 +69,33 @@ export default function GanttPage() {
   const isLight = theme === "light";
   const containerRef = useRef<HTMLDivElement>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const me = useAuthStore((s) => s.user);
+  const [view, setView] = useState<"mine" | "team">("team");
 
   const PRIORITY_BAR  = isLight ? PRIORITY_BAR_LIGHT  : PRIORITY_BAR_DARK;
   const PRIORITY_TEXT = isLight ? PRIORITY_TEXT_LIGHT : PRIORITY_TEXT_DARK;
 
+  // "My View" keeps only the current user's activity: projects they own (with all
+  // tasks) plus projects where they have an assigned task (only those tasks).
+  const visibleItems = useMemo(() => {
+    if (!data) return [];
+    if (view === "team" || !me?.email) return data.items;
+    const email = me.email.toLowerCase();
+    const mine: GanttProject[] = [];
+    for (const proj of data.items) {
+      if ((proj.owner_email ?? "").toLowerCase() === email) { mine.push(proj); continue; }
+      const myTasks = proj.subtasks.filter((t) => (t.assignee_email ?? "").toLowerCase() === email);
+      if (myTasks.length > 0) mine.push({ ...proj, subtasks: myTasks });
+    }
+    return mine;
+  }, [data, view, me]);
+
   const toggleProject = useCallback((id: string) => {
     setExpandedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }, []);
-  const expandAll  = useCallback(() => { if (data) setExpandedIds(new Set(data.items.map(p => p.id))); }, [data]);
+  const expandAll  = useCallback(() => setExpandedIds(new Set(visibleItems.map(p => p.id))), [visibleItems]);
   const collapseAll = useCallback(() => setExpandedIds(new Set()), []);
-  const allExpanded = data ? data.items.length > 0 && expandedIds.size === data.items.length : false;
+  const allExpanded = visibleItems.length > 0 && expandedIds.size === visibleItems.length;
 
   const { minDate, totalDays, todayOffset, monthCols } = useMemo(() => {
     if (!data) return { minDate: new Date(), totalDays: 30, todayOffset: 0, monthCols: [] };
@@ -129,15 +146,41 @@ export default function GanttPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <Header
         title="Gantt Chart"
-        subtitle={`${data.items.length} projects · ${expandedIds.size} expanded`}
+        subtitle={`${view === "mine" ? "My activity" : "All projects"} · ${visibleItems.length} projects · ${expandedIds.size} expanded`}
         actions={
           <div className="flex items-center gap-2">
+            <div className={`flex items-center rounded-lg border overflow-hidden ${isLight ? "border-slate-300" : "border-slate-700"}`}>
+              {(["mine", "team"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={`text-xs px-3 py-1.5 font-medium transition-colors ${
+                    view === v
+                      ? "bg-indigo-600 text-white"
+                      : isLight
+                        ? "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                        : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                  }`}
+                >
+                  {v === "mine" ? "My View" : "Team View"}
+                </button>
+              ))}
+            </div>
             <button onClick={expandAll} disabled={allExpanded} className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${btnBase}`}>Expand All</button>
             <button onClick={collapseAll} disabled={expandedIds.size === 0} className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${btnBase}`}>Collapse All</button>
           </div>
         }
       />
 
+      {visibleItems.length === 0 && (
+        <div className="flex-1 flex items-center justify-center flex-col gap-3">
+          <span className={`text-3xl ${metaText}`}>◔</span>
+          <p className={`text-sm ${metaText}`}>Nothing assigned to you yet.</p>
+          <button onClick={() => setView("team")} className="text-xs font-medium text-indigo-500 hover:text-indigo-400">Switch to Team View →</button>
+        </div>
+      )}
+
+      {visibleItems.length > 0 && (
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className={`flex flex-1 overflow-hidden border-t ${borderColor}`}>
 
@@ -148,7 +191,7 @@ export default function GanttPage() {
               <span className={`text-[9px] ml-auto ${metaText}`}>click to expand</span>
             </div>
 
-            {data.items.map((proj) => {
+            {visibleItems.map((proj) => {
               const isExpanded = expandedIds.has(proj.id);
               return (
                 <div key={proj.id}>
@@ -196,7 +239,7 @@ export default function GanttPage() {
                 ))}
               </div>
 
-              {data.items.map((proj) => {
+              {visibleItems.map((proj) => {
                 const isExpanded = expandedIds.has(proj.id);
                 const projStartOff = Math.max(0, daysBetween(minDate, parseDate(proj.start_date)));
                 const projEndOff   = Math.min(totalDays, daysBetween(minDate, parseDate(proj.end_date)));
@@ -264,6 +307,7 @@ export default function GanttPage() {
           <span className={`ml-auto text-[10px] ${metaText}`}>Click a project row to expand tasks</span>
         </div>
       </div>
+      )}
     </div>
   );
 }
