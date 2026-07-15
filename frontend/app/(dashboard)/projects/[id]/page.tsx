@@ -9,6 +9,8 @@ import { PRIORITY_CONFIG, HEALTH_CONFIG, KANBAN_COLUMNS } from "@/lib/types";
 import { formatDate, getDaysUntil, initials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/types";
+import { useAuthStore } from "@/lib/store";
+import { canEditTask } from "@/lib/permissions";
 
 // ── Inline editable field ─────────────────────────────────────────────────────
 function EditableText({
@@ -94,12 +96,14 @@ function EditableSelect({
 function TaskModal({
   task,
   currentProjectId,
+  canEdit,
   onClose,
   onSave,
   onDelete,
 }: {
-  task: { id: string; title: string; description?: string; priority: string; status: string; is_completed: boolean; due_date?: string; assigned_to?: string; assignee?: { id: string; name: string } | null } | null;
+  task: { id: string; title: string; description?: string; priority: string; status: string; is_completed: boolean; due_date?: string; assigned_to?: string; created_by?: string; assignee?: { id: string; name: string } | null } | null;
   currentProjectId: string;
+  canEdit: boolean;
   onClose: () => void;
   onSave: (id: string, data: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
@@ -118,31 +122,36 @@ function TaskModal({
 
   if (!task) return null;
 
-  const inputCls = "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500";
+  const inputCls = "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed";
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0f1629] border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-          <h2 className="text-sm font-semibold text-white">Edit Task</h2>
+          <h2 className="text-sm font-semibold text-white">{canEdit ? "Edit Task" : "View Task"}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-white text-xl leading-none transition-colors">×</button>
         </div>
         <div className="p-5 space-y-4">
+          {!canEdit && (
+            <div className="rounded-lg bg-amber-950/40 border border-amber-800/40 px-3 py-2 text-[11px] text-amber-300">
+              🔒 This task is assigned to / created by someone else, so it's read-only. Only the assignee, creator, or an admin can edit it.
+            </div>
+          )}
           {/* Title */}
           <div>
             <label className="text-xs text-slate-400 block mb-1.5">Title</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} className={inputCls} />
           </div>
           {/* Description */}
           <div>
             <label className="text-xs text-slate-400 block mb-1.5">Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`${inputCls} resize-none`} />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canEdit} rows={3} className={`${inputCls} resize-none`} />
           </div>
           {/* Priority + Due Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-400 block mb-1.5">Priority</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value)} className={inputCls}>
+              <select value={priority} onChange={(e) => setPriority(e.target.value)} disabled={!canEdit} className={inputCls}>
                 {["low", "medium", "high", "urgent"].map((p) => (
                   <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
                 ))}
@@ -150,7 +159,7 @@ function TaskModal({
             </div>
             <div>
               <label className="text-xs text-slate-400 block mb-1.5">Due Date</label>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={!canEdit} className={inputCls} />
             </div>
           </div>
           {/* Assignee */}
@@ -159,7 +168,7 @@ function TaskModal({
               Assigned to
               {task.assignee && <span className="ml-2 text-slate-600">currently: {task.assignee.name}</span>}
             </label>
-            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className={inputCls}>
+            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} disabled={!canEdit} className={inputCls}>
               <option value="">Unassigned</option>
               {(users as any[]).map((u: any) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
@@ -175,8 +184,9 @@ function TaskModal({
               </p>
             </div>
             <button
-              onClick={() => setIsPrivate(!isPrivate)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${isPrivate ? "bg-amber-500" : "bg-slate-600"}`}
+              onClick={() => canEdit && setIsPrivate(!isPrivate)}
+              disabled={!canEdit}
+              className={`relative w-10 h-5 rounded-full transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${isPrivate ? "bg-amber-500" : "bg-slate-600"}`}
             >
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${isPrivate ? "translate-x-5" : "translate-x-0.5"}`} />
             </button>
@@ -188,7 +198,7 @@ function TaskModal({
               Project
               <span className="ml-2 text-indigo-400 text-[10px] bg-indigo-950 px-1.5 py-0.5 rounded">move task</span>
             </label>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inputCls}>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={!canEdit} className={inputCls}>
               {(allProjects as any[]).map((p: any) => (
                 <option key={p.id} value={p.id}>{p.title}</option>
               ))}
@@ -196,34 +206,42 @@ function TaskModal({
           </div>
         </div>
         <div className="flex items-center justify-between px-5 py-4 border-t border-slate-800">
-          <button
-            onClick={() => { onDelete(task.id); onClose(); }}
-            className="text-xs text-red-400 hover:text-red-300 transition-colors"
-          >
-            Delete task
-          </button>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors">
-              Cancel
+          {canEdit ? (
+            <>
+              <button
+                onClick={() => { onDelete(task.id); onClose(); }}
+                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+              >
+                Delete task
+              </button>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors">
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    onSave(task.id, {
+                      title,
+                      description,
+                      priority,
+                      due_date: dueDate || null,
+                      assigned_to: assignedTo || null,
+                      is_private: isPrivate,
+                      ...(projectId !== currentProjectId && { project_id: projectId }),
+                    });
+                    onClose();
+                  }}
+                  className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+                >
+                  Save changes
+                </button>
+              </div>
+            </>
+          ) : (
+            <button onClick={onClose} className="ml-auto px-4 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">
+              Close
             </button>
-            <button
-              onClick={() => {
-                onSave(task.id, {
-                  title,
-                  description,
-                  priority,
-                  due_date: dueDate || null,
-                  assigned_to: assignedTo || null,
-                  is_private: isPrivate,
-                  ...(projectId !== currentProjectId && { project_id: projectId }),
-                });
-                onClose();
-              }}
-              className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
-            >
-              Save changes
-            </button>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -235,6 +253,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
   const [editingTask, setEditingTask] = useState<string | null>(null);
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -342,6 +361,7 @@ export default function ProjectDetailPage() {
         <TaskModal
           task={editingTaskObj}
           currentProjectId={id!}
+          canEdit={canEditTask(editingTaskObj, user)}
           onClose={() => setEditingTask(null)}
           onSave={(taskId, data) => updateTask.mutate({ taskId, data })}
           onDelete={(taskId) => deleteTask.mutate(taskId)}
@@ -442,20 +462,26 @@ export default function ProjectDetailPage() {
                 </div>
 
                 <div className="space-y-2">
-                  {project.tasks?.map((task) => (
+                  {project.tasks?.map((task) => {
+                    const canEdit = canEditTask(task, user);
+                    return (
                     <div
                       key={task.id}
                       className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900/60 group hover:bg-slate-800/60 transition-colors cursor-pointer"
                       onClick={() => setEditingTask(task.id)}
                     >
                       <button
+                        disabled={!canEdit}
+                        title={canEdit ? "Toggle complete" : "Only the assignee, creator, or an admin can change this task"}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!canEdit) return;
                           updateTask.mutate({ taskId: task.id, data: { is_completed: !task.is_completed } });
                         }}
                         className={cn(
                           "w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors",
-                          task.is_completed ? "border-green-500 bg-green-500" : "border-slate-600 hover:border-indigo-400"
+                          task.is_completed ? "border-green-500 bg-green-500" : "border-slate-600 hover:border-indigo-400",
+                          !canEdit && "opacity-50 cursor-not-allowed hover:border-slate-600"
                         )}
                       >
                         {task.is_completed && <span className="text-[8px] text-white">✓</span>}
@@ -487,10 +513,11 @@ export default function ProjectDetailPage() {
                         {task.priority}
                       </span>
                       <span className="text-[10px] text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Edit →
+                        {canEdit ? "Edit →" : "🔒 View"}
                       </span>
                     </div>
-                  ))}
+                  );
+                  })}
 
                   {addingTask && (
                     <div className="flex flex-col gap-2">
