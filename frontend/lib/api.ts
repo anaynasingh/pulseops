@@ -36,6 +36,16 @@ export const authApi = {
   getApiKey: () => api.get("/auth/api-key").then((r) => r.data.api_key as string),
   mcpComplete: () => api.post("/auth/mcp-complete").then((r) => r.data),
   mcpReset: () => api.post("/auth/mcp-reset").then((r) => r.data),
+  // Per-user Microsoft "connect" for the in-app assistant (mail/calendar/transcripts).
+  m365Status: () =>
+    api.get("/auth/microsoft/connect/status").then(
+      (r) => r.data as { connected: boolean; connected_at: string | null }
+    ),
+  m365Connect: async () => {
+    const r = await api.get("/auth/microsoft/connect");
+    window.location.href = r.data.auth_url as string;
+  },
+  m365Disconnect: () => api.post("/auth/microsoft/disconnect").then((r) => r.data),
 };
 
 // ── Users ─────────────────────────────────────────────────────────────────────

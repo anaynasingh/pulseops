@@ -694,21 +694,45 @@ class _ClaudeChatRequest(BaseModel):
 async def claude_chat(
     payload: _ClaudeChatRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Forward a chat message to the local Claude Code bridge.
+    """Forward a chat message to the Claude Code bridge, as THIS user.
 
-    The bridge (claude-bridge/bridge.py) runs on the user's machine and executes
-    the query with Claude Code + the PulseOps MCP tools, so Claude can read
-    transcripts, create tasks, move projects, etc. Returns Claude's reply.
+    The bridge executes the query with Claude Code + the PulseOps MCP tools, so
+    Claude can read transcripts, create tasks, move projects, etc. We forward the
+    caller's OWN PulseOps key and (if connected) their OWN Microsoft token cache,
+    so the assistant acts and reads as them — never as a shared account.
     """
     import os
+    import base64
+    import secrets
     import httpx
+    from app.core.crypto import decrypt_str
 
     bridge_url = os.getenv("CLAUDE_BRIDGE_URL", "http://localhost:8765").rstrip("/")
     # Shared secret for a remote (Railway) bridge. Must match BRIDGE_SECRET on
     # the bridge service. Empty for a local bridge that runs without a secret.
     bridge_secret = os.getenv("BRIDGE_SECRET", "").strip()
     headers = {"X-Bridge-Secret": bridge_secret} if bridge_secret else {}
+
+    # Per-user PulseOps identity: the assistant acts as this user (their own MCP key).
+    if not current_user.api_key:
+        current_user.api_key = secrets.token_urlsafe(32)
+        await db.commit()
+        await db.refresh(current_user)
+
+    # Per-user Microsoft access: forward this user's own token cache if connected.
+    # Absent → the bridge runs without M365 tools for this request; it must NEVER
+    # fall back to another user's mailbox.
+    m365_token_b64 = None
+    if current_user.m365_token_cache:
+        try:
+            cache_json = decrypt_str(current_user.m365_token_cache)
+            m365_token_b64 = base64.b64encode(cache_json.encode("utf-8")).decode("ascii")
+        except Exception:
+            logger.warning("Could not decrypt M365 token cache for user %s", current_user.id)
+            m365_token_b64 = None
+
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=5.0)) as client:
             resp = await client.post(
@@ -717,6 +741,8 @@ async def claude_chat(
                     "message": payload.message,
                     "session_id": payload.session_id,
                     "user_email": current_user.email,
+                    "pulseops_token": current_user.api_key,
+                    "m365_token_b64": m365_token_b64,
                 },
                 headers=headers,
             )

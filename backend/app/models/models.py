@@ -74,6 +74,9 @@ class User(Base):
     password_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ms_oid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     api_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Per-user Microsoft Graph token cache (MSAL, encrypted) for the in-app assistant.
+    m365_token_cache: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    m365_connected_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.contributor)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

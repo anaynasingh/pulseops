@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useUIStore } from "@/lib/store";
-import { aiApi } from "@/lib/api";
+import { aiApi, authApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { PRIORITY_CONFIG } from "@/lib/types";
@@ -64,7 +64,18 @@ export function AIAssistantPanel() {
   const [loading, setLoading] = useState(false);
   const [dedupeResult, setDedupeResult] = useState<any>(null);
   const [dedupeProjectId, setDedupeProjectId] = useState<string | undefined>();
+  const [m365Connected, setM365Connected] = useState<boolean | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Whether this user has connected their own Microsoft account. Only relevant to
+  // the Claude engine (mail/transcript tools); GPT engine doesn't use it.
+  useEffect(() => {
+    let cancelled = false;
+    authApi.m365Status()
+      .then((s) => { if (!cancelled) setM365Connected(s.connected); })
+      .catch(() => { if (!cancelled) setM365Connected(null); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
@@ -207,6 +218,32 @@ export function AIAssistantPanel() {
           ×
         </button>
       </div>
+
+      {/* Microsoft connect prompt — only for the Claude engine, which reads mail/transcripts */}
+      {engine === "claude" && m365Connected === false && (
+        <div className="px-3 py-2 border-b border-slate-800/60 bg-indigo-950/20 flex items-center gap-2">
+          <span className="text-[11px] text-slate-300 flex-1 leading-snug">
+            Connect Microsoft so the assistant can read <b>your</b> emails &amp; meetings.
+          </span>
+          <button
+            onClick={() => authApi.m365Connect()}
+            className="text-[10px] px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium whitespace-nowrap"
+          >
+            Connect
+          </button>
+        </div>
+      )}
+      {engine === "claude" && m365Connected === true && (
+        <div className="px-3 py-1.5 border-b border-slate-800/60 flex items-center gap-2">
+          <span className="text-[10px] text-green-400 flex-1">✓ Microsoft connected</span>
+          <button
+            onClick={async () => { try { await authApi.m365Disconnect(); } finally { setM365Connected(false); } }}
+            className="text-[10px] text-slate-500 hover:text-slate-300"
+          >
+            Disconnect
+          </button>
+        </div>
+      )}
 
       {/* Quick prompts */}
       <div className="px-3 py-2 border-b border-slate-800/60 flex flex-wrap gap-1.5">
