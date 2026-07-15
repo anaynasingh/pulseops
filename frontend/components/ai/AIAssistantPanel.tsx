@@ -245,20 +245,6 @@ export function AIAssistantPanel() {
         </div>
       )}
 
-      {/* Quick prompts */}
-      <div className="px-3 py-2 border-b border-slate-800/60 flex flex-wrap gap-1.5">
-        {QUICK_PROMPTS.map((p) => (
-          <button
-            key={p}
-            onClick={() => handleSend(p)}
-            disabled={loading}
-            className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-2 py-1 rounded transition-colors"
-          >
-            {p}
-          </button>
-        ))}
-      </div>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {messages.map((msg, i) => (
@@ -319,6 +305,22 @@ export function AIAssistantPanel() {
             )}
           </div>
         ))}
+
+        {/* Quick prompts — only on a fresh chat (no user messages yet). Lives inside
+            the scroll area so it never sticks to the top while scrolling. */}
+        {!messages.some((m) => m.role === "user") && !loading && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {QUICK_PROMPTS.map((p) => (
+              <button
+                key={p}
+                onClick={() => handleSend(p)}
+                className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-2 py-1 rounded transition-colors"
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        )}
 
         {loading && (
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-500 max-w-[90%]">
