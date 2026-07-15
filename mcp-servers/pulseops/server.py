@@ -94,6 +94,11 @@ def _fmt_project(p: dict) -> str:
         line += f" | due: {due[:10]}"
     if progress is not None:
         line += f" | progress: {progress}%"
+    # Expose the project UUID — create_task/move_project/etc. require project_id,
+    # and without this the model can't discover it from a list/search result.
+    pid = p.get("id")
+    if pid:
+        line += f" | id: {pid}"
     return line
 
 
@@ -189,18 +194,19 @@ async def list_tools() -> list[Tool]:
                     "description": {"type": "string", "description": "Task description"},
                     "priority": {"type": "string", "description": "Priority: critical, high, medium, low"},
                     "due_date": {"type": "string", "description": "Due date in YYYY-MM-DD format"},
-                    "assigned_to": {"type": "string", "description": "Email or name of the assignee"},
+                    "assignee": {"type": "string", "description": "Email (preferred) or full name of the person to assign. Resolved to a user server-side; omit to assign to yourself."},
                 },
                 "required": ["project_id", "title"],
             },
         ),
         Tool(
             name="update_task",
-            description="Update a task (mark complete, change priority, set due date).",
+            description="Update a task (reassign, mark complete, change priority, set due date).",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "task_id": {"type": "string", "description": "The UUID of the task to update"},
+                    "assignee": {"type": "string", "description": "Reassign to this person — email (preferred) or full name; resolved to a user server-side."},
                     "is_completed": {"type": "boolean", "description": "Mark the task as completed"},
                     "priority": {"type": "string", "description": "New priority"},
                     "status": {"type": "string", "description": "New status"},
@@ -480,7 +486,7 @@ async def _create_task(args: dict) -> str:
         "project_id": args["project_id"],
         "title": args["title"],
     }
-    for field in ("description", "priority", "due_date", "assigned_to"):
+    for field in ("description", "priority", "due_date", "assignee"):
         if args.get(field) is not None:
             body[field] = args[field]
 
@@ -489,11 +495,14 @@ async def _create_task(args: dict) -> str:
         return _error(resp.text, resp.status_code)
 
     t = resp.json()
+    a = t.get("assignee") or {}
+    assignee_disp = a.get("name") or a.get("email") or "unassigned (defaulted to creator)"
     return (
         f"Task created successfully!\n"
         f"  ID:         {t.get('id', '')}\n"
         f"  Title:      {t.get('title', '')}\n"
         f"  Project ID: {t.get('project_id', '')}\n"
+        f"  Assignee:   {assignee_disp}\n"
         f"  Priority:   {t.get('priority', '')}\n"
         f"  Due Date:   {(t.get('due_date') or '')[:10] or 'not set'}"
     )
@@ -511,9 +520,12 @@ async def _update_task(args: dict) -> str:
 
     t = resp.json()
     done_str = "✅ Completed" if t.get("is_completed") else "⬜ In Progress"
+    a = t.get("assignee") or {}
+    assignee_disp = a.get("name") or a.get("email") or "unassigned"
     return (
         f"Task updated: {t.get('title', task_id)}\n"
         f"  Status: {done_str}\n"
+        f"  Assignee: {assignee_disp}\n"
         f"  Priority: {t.get('priority', '')}"
     )
 

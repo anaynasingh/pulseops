@@ -97,6 +97,33 @@ async def day_view(
     }
 
 
+async def _resolve_assignee_to_id(db: AsyncSession, assignee_str: str) -> UUID:
+    """Resolve an email (preferred) or name string to a user id, so callers can
+    hard-assign a task without knowing the UUID. Raises 400 if the string is
+    ambiguous (matches >1 user by name) or matches no one."""
+    assignee_str = assignee_str.strip()
+    res = await db.execute(select(User).where(User.email.ilike(assignee_str)))
+    user = res.scalar_one_or_none()
+    if user is None:
+        res = await db.execute(
+            select(User).where(User.name.ilike(f"%{assignee_str}%")).limit(2)
+        )
+        matches = res.scalars().all()
+        if len(matches) == 1:
+            user = matches[0]
+        elif len(matches) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Assignee '{assignee_str}' matches multiple users — use their exact email.",
+            )
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not find a user matching assignee '{assignee_str}'. Use their exact email.",
+        )
+    return user.id
+
+
 @router.post("/", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 async def create_task(
     payload: TaskCreate,
@@ -104,31 +131,10 @@ async def create_task(
     current_user: User = Depends(require_writer),
 ):
     data = payload.model_dump(exclude_unset=True)
-    # Resolve an email/name assignee to a user id (so callers can assign without
-    # knowing the UUID). Explicit assigned_to wins if both are given.
+    # Resolve an email/name assignee to a user id. Explicit assigned_to wins.
     assignee_str = data.pop("assignee", None)
     if assignee_str and not data.get("assigned_to"):
-        assignee_str = assignee_str.strip()
-        res = await db.execute(select(User).where(User.email.ilike(assignee_str)))
-        user = res.scalar_one_or_none()
-        if user is None:
-            res = await db.execute(
-                select(User).where(User.name.ilike(f"%{assignee_str}%")).limit(2)
-            )
-            matches = res.scalars().all()
-            if len(matches) == 1:
-                user = matches[0]
-            elif len(matches) > 1:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Assignee '{assignee_str}' matches multiple users — use their exact email.",
-                )
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not find a user matching assignee '{assignee_str}'. Use their exact email.",
-            )
-        data["assigned_to"] = user.id
+        data["assigned_to"] = await _resolve_assignee_to_id(db, assignee_str)
     # No task is left unassigned: default the assignee to its creator.
     if "assigned_to" not in data or data["assigned_to"] is None:
         data["assigned_to"] = current_user.id
@@ -171,6 +177,11 @@ async def update_task(
         )
 
     update_data = payload.model_dump(exclude_unset=True)
+    # Resolve an email/name assignee to a user id for reassignment. Explicit
+    # assigned_to wins if both are given.
+    assignee_str = update_data.pop("assignee", None)
+    if assignee_str and not update_data.get("assigned_to"):
+        update_data["assigned_to"] = await _resolve_assignee_to_id(db, assignee_str)
     if "is_completed" in update_data and update_data["is_completed"] and not task.is_completed:
         update_data["completed_at"] = datetime.utcnow()
     if "assigned_to" in update_data and update_data["assigned_to"] != task.assigned_to:

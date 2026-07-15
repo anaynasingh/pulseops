@@ -12,8 +12,8 @@
       "command": "python",
       "args": ["mcp-servers/m365/server.py"],
       "env": {
-        "M365_CLIENT_ID": "",
-        "M365_TENANT_ID": "common"
+        "M365_CLIENT_ID": "7d7b5cc0-5bf1-4b5b-9988-ca247f3d2173",
+        "M365_TENANT_ID": "d2df1e4d-b444-4a6f-b465-92b187684c19"
       }
     }
   }

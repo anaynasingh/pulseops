@@ -24,19 +24,21 @@ WORKDIR /app
 # Install Python deps first for better layer caching.
 COPY claude-bridge/requirements.txt /app/claude-bridge/requirements.txt
 COPY mcp-servers/pulseops/requirements.txt /app/mcp-servers/pulseops/requirements.txt
+COPY mcp-servers/m365/requirements.txt /app/mcp-servers/m365/requirements.txt
 RUN pip3 install --no-cache-dir --break-system-packages \
         -r /app/claude-bridge/requirements.txt \
-        -r /app/mcp-servers/pulseops/requirements.txt
+        -r /app/mcp-servers/pulseops/requirements.txt \
+        -r /app/mcp-servers/m365/requirements.txt
 
 # App code.
 COPY claude-bridge/ /app/claude-bridge/
 COPY mcp-servers/ /app/mcp-servers/
 
 # Claude Code (non-bare, so it reads CLAUDE_CODE_OAUTH_TOKEN) needs a writable
-# HOME for its config dir. Bind on all interfaces so Railway's private network
-# can reach the service.
+# HOME for its config dir. Bind on :: (IPv6, dual-stack) — Railway's private
+# network is IPv6-only, so 0.0.0.0 would be unreachable from the backend.
 ENV HOME=/app \
-    BRIDGE_HOST=0.0.0.0 \
+    BRIDGE_HOST=:: \
     PYTHONIOENCODING=utf-8 \
     PYTHONUNBUFFERED=1
 

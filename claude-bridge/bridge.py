@@ -34,6 +34,7 @@ load_dotenv(BRIDGE_DIR / ".env")
 
 REPO_ROOT = BRIDGE_DIR.parent
 PULSEOPS_MCP_SERVER = REPO_ROOT / "mcp-servers" / "pulseops" / "server.py"
+M365_MCP_SERVER = REPO_ROOT / "mcp-servers" / "m365" / "server.py"
 MCP_CONFIG_PATH = BRIDGE_DIR / ".mcp-config.json"   # generated at startup (gitignored)
 WORKDIR = BRIDGE_DIR / "workdir"                    # neutral cwd so no project CLAUDE.md is loaded
 
@@ -50,6 +51,12 @@ CLAUDE_TIMEOUT_SECONDS = int(os.getenv("CLAUDE_TIMEOUT_SECONDS", "540"))
 MAX_TURNS = os.getenv("CLAUDE_MAX_TURNS", "40")
 PYTHON_CMD = os.getenv("PYTHON_CMD", sys.executable or "python")
 
+# M365 (Outlook mail/calendar + Teams transcripts) is attached only when an
+# Azure app client id is configured. Kept optional so local/transcripts-only
+# runs work unchanged.
+M365_ENABLED = bool(os.getenv("M365_CLIENT_ID", "").strip())
+ALLOWED_TOOLS = "mcp__pulseops,mcp__m365" if M365_ENABLED else "mcp__pulseops"
+
 SYSTEM_PROMPT = """You are the PulseOps AI Assistant, powered by Claude Code and embedded in the
 PulseOps team task-management app. Your reply text is shown directly in a small chat panel.
 
@@ -65,10 +72,20 @@ Rules:
 - Tasks must belong to a project: find a fitting existing project with list_projects/search_projects
   first; only create a new project if nothing fits.
 - Before creating tasks, check existing ones in the target project to avoid duplicates.
+- Always hard-assign tasks to the right person: pass the `assignee` field on create_task / update_task using their EMAIL (e.g. first.last@prospect33.com — most reliable; a full name also works). Do NOT put the owner's name in the task title — the assignee field is what records ownership. If you can't map an owner to a user, say so rather than guessing.
 - Keep replies short and chat-friendly: what you did, what you found, and any IDs/links that help.
   Use simple markdown (bold, bullet lists). No headings, no code blocks unless asked.
 - Stay on topic: projects, tasks, meetings, priorities, team workload. Politely decline anything else.
 """
+
+# Appended only when the M365 server is attached.
+M365_PROMPT = """
+
+You also have Microsoft 365 tools for the signed-in user's own account:
+- list_calendar_events (find meetings), get_meeting_transcript (read a Teams meeting transcript by event id or join URL)
+- list_emails / search_emails / get_email / get_unread_emails (read Outlook mail), get_my_profile
+
+Turning a meeting into tasks: call list_calendar_events to find the meeting, then get_meeting_transcript with that event's id, read/summarize it, and create tasks on the board with the PulseOps tools. If a transcript isn't available (transcription was off, still processing, or you weren't the organizer), say so plainly and offer to work from pasted text instead. Do the same for emails: read with the M365 tools, then create tasks with PulseOps."""
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +149,26 @@ def write_mcp_config() -> None:
             }
         }
     }
+
+    if M365_ENABLED:
+        # Pass only the vars that are actually set so the server can fall back to
+        # its own defaults; force NO_DEVICE_FLOW so a missing token fails fast
+        # instead of hanging on an interactive login nobody can complete.
+        m365_env = {
+            "M365_CLIENT_ID": os.getenv("M365_CLIENT_ID", ""),
+            "M365_TENANT_ID": os.getenv("M365_TENANT_ID", "common"),
+            "M365_NO_DEVICE_FLOW": "1",
+        }
+        for passthru in ("M365_TOKEN_CACHE", "M365_TOKEN_B64", "M365_SCOPES", "M365_CLIENT_SECRET"):
+            val = os.getenv(passthru, "").strip()
+            if val:
+                m365_env[passthru] = val
+        config["mcpServers"]["m365"] = {
+            "command": PYTHON_CMD,
+            "args": [str(M365_MCP_SERVER)],
+            "env": m365_env,
+        }
+
     MCP_CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
@@ -175,7 +212,7 @@ def _do_chat(payload: ChatRequest) -> dict:
     if not payload.message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
 
-    system_prompt = SYSTEM_PROMPT
+    system_prompt = SYSTEM_PROMPT + (M365_PROMPT if M365_ENABLED else "")
     if payload.user_email:
         system_prompt += f"\nThe user chatting with you is logged in as: {payload.user_email}"
 
@@ -189,7 +226,7 @@ def _do_chat(payload: ChatRequest) -> dict:
         # has no one to answer and aborts the run (fine on a dev machine that
         # already trusts the tools, but fatal in a fresh container).
         "--permission-mode", "dontAsk",
-        "--allowedTools", "mcp__pulseops",
+        "--allowedTools", ALLOWED_TOOLS,
         "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task",
         "--append-system-prompt", system_prompt,
         "--max-turns", MAX_TURNS,
@@ -257,4 +294,21 @@ if __name__ == "__main__":
     print(f"  Claude CLI : {' '.join(CLAUDE_CMD)}")
     print(f"  MCP server : {PULSEOPS_MCP_SERVER}")
     print(f"  Auth       : {'shared secret required' if BRIDGE_SECRET else 'OPEN (no secret set)'}")
-    uvicorn.run(app, host=BRIDGE_HOST, port=BRIDGE_PORT)
+
+    if BRIDGE_HOST == "::":
+        # Bind an explicit DUAL-STACK IPv6 socket. Railway's private network is
+        # IPv6 (needs ::), but its public edge + healthchecks probe over IPv4.
+        # This container defaults to IPV6_V6ONLY=1, so a plain "::" bind is
+        # IPv6-only and unreachable from IPv4. Clearing V6ONLY makes one socket
+        # serve both.
+        import socket
+        sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except (AttributeError, OSError) as exc:
+            print(f"  (warning: could not enable dual-stack: {exc})")
+        sock.bind(("::", BRIDGE_PORT))
+        uvicorn.Server(uvicorn.Config(app, log_level="info")).run(sockets=[sock])
+    else:
+        uvicorn.run(app, host=BRIDGE_HOST, port=BRIDGE_PORT)

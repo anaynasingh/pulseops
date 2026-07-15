@@ -68,8 +68,16 @@ You need to register a free app in Azure so the server can talk to Microsoft Gra
    - `Mail.Read`
    - `Mail.ReadWrite`
    - `Calendars.Read`
+   - `OnlineMeetings.Read`
+   - `OnlineMeetingTranscript.Read.All` (needed for `get_meeting_transcript`)
+   - `Files.Read.All` (needed for `find_meeting_files` / `read_meeting_file` — reading transcript/recording files, incl. meetings you didn't organize)
+   - `Sites.Read.All` (needed for `find_meeting_files` on channel/SharePoint meetings)
 6. Click **"Add permissions"**
-7. Click **"Grant admin consent for [your org]"** (requires admin rights — if you don't have them, ask your IT admin to do this step)
+7. Click **"Grant admin consent for [your org]"** — **required** in the prospect33 tenant. `OnlineMeetingTranscript.Read.All` (and, per tenant policy, the mail/calendar scopes too) cannot be user-consented, so an admin must grant consent or nothing works. If you don't have admin rights, send IT this URL to click:
+   ```
+   https://login.microsoftonline.com/d2df1e4d-b444-4a6f-b465-92b187684c19/adminconsent?client_id=7d7b5cc0-5bf1-4b5b-9988-ca247f3d2173
+   ```
+   The `/adminconsent` URL grants every permission **declared on the app registration**, so make sure all six above are added (step 5) before the admin clicks — otherwise a missing scope won't get consented.
 
 ### Step 3 — Enable public client flows
 
@@ -88,11 +96,12 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Open `.env` and fill in:
+Open `.env` and fill in (these are the pinned PulseOps values — do **not** substitute another app id):
 ```
-M365_CLIENT_ID=paste-your-application-client-id-here
-M365_TENANT_ID=paste-your-directory-tenant-id-here
+M365_CLIENT_ID=7d7b5cc0-5bf1-4b5b-9988-ca247f3d2173
+M365_TENANT_ID=d2df1e4d-b444-4a6f-b465-92b187684c19
 ```
+> The correct app is the one named **"PulseOps"** (`7d7b5cc0…`) — the app registration that is admin-consented in the prospect33 tenant. An older app **"AI Task Management and Workflow Intelligence System"** (`7ba4bd53…`) is NOT consented; do not use it.
 
 ### Step 5 — First-time login
 
@@ -138,8 +147,8 @@ Both servers are registered in `.claude/settings.json`. Before using them, open 
       "command": "python",
       "args": ["mcp-servers/m365/server.py"],
       "env": {
-        "M365_CLIENT_ID": "your-azure-app-client-id",
-        "M365_TENANT_ID": "your-tenant-id"
+        "M365_CLIENT_ID": "7d7b5cc0-5bf1-4b5b-9988-ca247f3d2173",
+        "M365_TENANT_ID": "d2df1e4d-b444-4a6f-b465-92b187684c19"
       }
     }
   }
@@ -173,7 +182,8 @@ Claude will automatically call the right MCP tools behind the scenes.
 |---|---|
 | `ModuleNotFoundError: No module named 'mcp'` | Run `pip install -r requirements.txt` in the server folder |
 | `401 Unauthorized` from PulseOps | Re-grab your API key from PulseOps Settings → MCP Token and update `PULSEOPS_API_KEY` in `.env` or `settings.json` |
-| `M365_CLIENT_ID is not set` | Copy `.env.example` to `.env` and fill in your Azure app ID |
+| `M365_CLIENT_ID is not set` | Copy `.env.example` to `.env`; the pinned app id is `7d7b5cc0-5bf1-4b5b-9988-ca247f3d2173` (app name "PulseOps") |
+| Sign-in shows **"Need admin approval"** | This app needs tenant admin consent. Have IT open the `/adminconsent` URL in Step 2.7. Also confirm you're using `7d7b5cc0…` (app "PulseOps"), not the old `7ba4bd53…` app |
 | Device code flow shows an error | Make sure "Allow public client flows" is enabled in Azure |
 | Token expired | Delete `~/.pulseops_m365_token.json` and re-run `python server.py` to re-authenticate |
 | Claude Code doesn't see the MCP tools | Restart Claude Code after updating `settings.json` |

@@ -198,6 +198,9 @@ class TaskUpdate(BaseModel):
     status: Optional[ProjectStatus] = None
     priority: Optional[PriorityLevel] = None
     assigned_to: Optional[UUID] = None
+    # Convenience: email (preferred) or name the server resolves to a user to
+    # reassign the task, without the caller knowing the UUID.
+    assignee: Optional[str] = None
     project_id: Optional[UUID] = None   # move to different project
     due_date: Optional[date] = None
     is_completed: Optional[bool] = None

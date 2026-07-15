@@ -35,8 +35,23 @@ TENANT_ID = os.getenv("M365_TENANT_ID", "common")
 CLIENT_SECRET = os.getenv("M365_CLIENT_SECRET", "")  # optional
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-SCOPES = ["Mail.Read", "Calendars.Read", "Mail.ReadWrite"]
-TOKEN_CACHE_PATH = Path.home() / ".pulseops_m365_token.json"
+# Scopes are env-overridable so the transcript scope (which needs tenant-admin
+# consent) can be dropped if consent isn't available — email/calendar/meetings
+# still work without it. IMPORTANT: keep the server's scopes identical to what
+# the cached token was minted with, or silent refresh re-triggers device flow.
+_DEFAULT_SCOPES = (
+    "Mail.Read Mail.ReadWrite Calendars.Read "
+    "OnlineMeetings.Read OnlineMeetingTranscript.Read.All "
+    # Files.Read.All / Sites.Read.All back the find_meeting_files & read_meeting_file
+    # tools (reading transcript/recording files for meetings you didn't organize).
+    "Files.Read.All Sites.Read.All"
+)
+SCOPES = os.getenv("M365_SCOPES", _DEFAULT_SCOPES).split()
+# Token cache: on Railway point this at the mounted volume so it survives
+# restarts (e.g. M365_TOKEN_CACHE=/data/.pulseops_m365_token.json).
+TOKEN_CACHE_PATH = Path(
+    os.getenv("M365_TOKEN_CACHE", str(Path.home() / ".pulseops_m365_token.json"))
+)
 
 # ---------------------------------------------------------------------------
 # MSAL auth
@@ -44,7 +59,24 @@ TOKEN_CACHE_PATH = Path.home() / ".pulseops_m365_token.json"
 _token_cache = msal.SerializableTokenCache()
 
 
+def _seed_cache_from_env() -> None:
+    """Materialize the token cache from M365_TOKEN_B64 on a fresh headless
+    container. The value is base64 of a serialized MSAL cache produced locally
+    by m365_login.py, so silent refresh works without an interactive login."""
+    b64 = os.getenv("M365_TOKEN_B64", "").strip()
+    if not b64 or TOKEN_CACHE_PATH.exists():
+        return
+    import base64
+    try:
+        TOKEN_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        TOKEN_CACHE_PATH.write_text(base64.b64decode(b64).decode("utf-8"), encoding="utf-8")
+        print(f"Seeded M365 token cache from M365_TOKEN_B64 at {TOKEN_CACHE_PATH}", file=sys.stderr)
+    except Exception as exc:
+        print(f"WARNING: could not seed token cache from M365_TOKEN_B64: {exc}", file=sys.stderr)
+
+
 def _load_cache() -> None:
+    _seed_cache_from_env()
     if TOKEN_CACHE_PATH.exists():
         _token_cache.deserialize(TOKEN_CACHE_PATH.read_text(encoding="utf-8"))
 
@@ -84,7 +116,15 @@ def _get_token() -> str:
             _save_cache()
             return result["access_token"]
 
-    # Fall back to device code flow
+    # Fall back to device code flow — but never in a headless deploy, where it
+    # would block forever (no one to enter the code). The bridge sets
+    # M365_NO_DEVICE_FLOW=1; auth must be pre-seeded via M365_TOKEN_B64.
+    if os.getenv("M365_NO_DEVICE_FLOW"):
+        raise RuntimeError(
+            "M365 is not authenticated and interactive device-code login is disabled "
+            "in this environment. Run m365_login.py locally and set M365_TOKEN_B64 "
+            "(and matching M365_SCOPES) on the service."
+        )
     flow = app.initiate_device_flow(scopes=SCOPES)
     if "user_code" not in flow:
         raise RuntimeError(f"Failed to create device flow: {flow.get('error_description', flow)}")
@@ -273,11 +313,17 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_calendar_events",
-            description="List upcoming calendar events from Outlook Calendar.",
+            description=(
+                "List calendar events from Outlook Calendar. Looks both backward and "
+                "forward, so it includes meetings that already happened earlier today "
+                "or in recent days (use this to find a past meeting to summarize or "
+                "pull a transcript from)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "days_ahead": {"type": "integer", "description": "How many days ahead to look (default 7)", "default": 7},
+                    "days_back": {"type": "integer", "description": "How many days back to look, including earlier today (default 7)", "default": 7},
                 },
             },
         ),
@@ -310,6 +356,64 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
             },
         ),
+        Tool(
+            name="get_meeting_transcript",
+            description=(
+                "Fetch a Teams meeting transcript straight off a calendar event, returned "
+                "as readable text to summarize and turn into action items. Call "
+                "list_calendar_events first and pass the event's id (or its Teams join URL). "
+                "Works even for meetings you did NOT organize, as long as you were invited "
+                "and transcription was on. For a recurring series it returns the latest "
+                "occurrence by default; pass on_date to pick a specific one (the response "
+                "lists which occurrence dates are available)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "string", "description": "Calendar event ID from list_calendar_events."},
+                    "join_url": {"type": "string", "description": "Teams meeting join URL (alternative to event_id)."},
+                    "on_date": {"type": "string", "description": "Optional YYYY-MM-DD to pick a specific occurrence of a recurring meeting; defaults to the most recent."},
+                },
+            },
+        ),
+        Tool(
+            name="find_meeting_files",
+            description=(
+                "Search OneDrive AND files shared with you (and SharePoint) for Teams "
+                "meeting recordings/transcripts by keyword — e.g. the meeting subject "
+                "like 'Dev Meeting'. Use this when get_meeting_transcript fails because "
+                "you were NOT the organizer: recordings/transcripts of meetings others "
+                "organized are usually shared to your OneDrive 'Shared with me'. Returns "
+                "matching files with a drive_id + item_id you pass to read_meeting_file. "
+                "Requires the Files.Read.All / Sites.Read.All scopes."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Keyword to search for (e.g. the meeting subject)."},
+                    "count": {"type": "integer", "description": "Max files to return (default 15)", "default": 15},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="read_meeting_file",
+            description=(
+                "Download and return the text of a transcript file found via "
+                "find_meeting_files. Works for .vtt transcripts (returned as readable "
+                "'Speaker: text' lines). Pass the drive_id and item_id from "
+                "find_meeting_files. Note: video recordings (.mp4) cannot be transcribed "
+                "here — pick a .vtt/.txt/.docx transcript file if one is listed."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "drive_id": {"type": "string", "description": "Drive ID from find_meeting_files."},
+                    "item_id": {"type": "string", "description": "Item ID from find_meeting_files."},
+                },
+                "required": ["drive_id", "item_id"],
+            },
+        ),
     ]
 
 
@@ -339,6 +443,12 @@ async def _dispatch(name: str, args: dict) -> str:
         return await _mark_email_read(args)
     elif name == "get_my_profile":
         return await _get_my_profile(args)
+    elif name == "get_meeting_transcript":
+        return await _get_meeting_transcript(args)
+    elif name == "find_meeting_files":
+        return await _find_meeting_files(args)
+    elif name == "read_meeting_file":
+        return await _read_meeting_file(args)
     else:
         return _error(f"Unknown tool: {name}")
 
@@ -433,11 +543,13 @@ async def _search_emails(args: dict) -> str:
 
 async def _list_calendar_events(args: dict) -> str:
     days_ahead = int(args.get("days_ahead", 7))
+    days_back = int(args.get("days_back", 7))
 
     now = datetime.now(timezone.utc)
+    start = now - timedelta(days=days_back)
     end = now + timedelta(days=days_ahead)
 
-    start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    start_str = start.strftime("%Y-%m-%dT%H:%M:%SZ")
     end_str = end.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     select = "id,subject,start,end,location,organizer,attendees,isOnlineMeeting,onlineMeeting,bodyPreview"
@@ -455,9 +567,9 @@ async def _list_calendar_events(args: dict) -> str:
 
     events = resp.json().get("value", [])
     if not events:
-        return f"No calendar events in the next {days_ahead} days."
+        return f"No calendar events from {days_back} day(s) ago through the next {days_ahead} days."
 
-    lines = [f"Upcoming calendar events (next {days_ahead} days, {len(events)} total):"]
+    lines = [f"Calendar events (last {days_back} day(s) → next {days_ahead} days, {len(events)} total):"]
     for event in events:
         lines.append(_fmt_event(event))
 
@@ -501,6 +613,244 @@ async def _mark_email_read(args: dict) -> str:
         return _error(resp.text, resp.status_code)
 
     return f"Email {message_id} marked as read."
+
+
+def _clean_vtt(vtt: str) -> str:
+    """Reduce a WebVTT transcript to readable 'Speaker: text' lines."""
+    import re
+    lines_out: list[str] = []
+    last_speaker = None
+    for raw in vtt.splitlines():
+        line = raw.strip()
+        if not line or line == "WEBVTT" or line.isdigit() or "-->" in line:
+            continue
+        # Teams tags speakers as <v Full Name>text</v>
+        m = re.match(r"<v\s+([^>]+)>(.*?)</v>", line)
+        if m:
+            speaker, text = m.group(1).strip(), m.group(2).strip()
+        else:
+            speaker, text = None, re.sub(r"<[^>]+>", "", line).strip()
+        if not text:
+            continue
+        if speaker and speaker != last_speaker:
+            lines_out.append(f"\n{speaker}: {text}")
+            last_speaker = speaker
+        else:
+            lines_out.append(text)
+    return "\n".join(lines_out).strip()
+
+
+def _meeting_id_from_join_url(join_url: str):
+    """Construct the Graph onlineMeeting id straight from a Teams join URL.
+
+    The id is base64('1*{organizerOid}*0**{threadId}'), where both parts are in
+    the join URL. This lets an ATTENDEE read a meeting they did NOT organize —
+    delegated OnlineMeetingTranscript.Read.All governs access — bypassing the
+    organizer-only /me/onlineMeetings?$filter=JoinWebUrl lookup. For a recurring
+    series (same join URL every week) this id returns every occurrence's transcript.
+    """
+    import base64
+    from urllib.parse import unquote, urlparse
+    try:
+        p = urlparse(join_url)
+        thread = unquote(p.path.split("/meetup-join/", 1)[1].split("/", 1)[0])  # 19:meeting_...@thread.v2
+        ctx = json.loads(unquote(p.query.split("context=", 1)[1]))
+        oid = ctx["Oid"]
+        return base64.b64encode(f"1*{oid}*0**{thread}".encode()).decode()
+    except Exception:
+        return None
+
+
+async def _resolve_join_url(event_id: str, join_url: str):
+    """Return (join_url, error_str) from an explicit join URL or a calendar event."""
+    join = (join_url or "").strip()
+    if not join and event_id:
+        r = await _graph_request(
+            "GET", f"/me/events/{event_id}",
+            params={"$select": "onlineMeeting,isOnlineMeeting,subject"},
+        )
+        if r.status_code != 200:
+            return None, _error(r.text, r.status_code)
+        join = ((r.json().get("onlineMeeting") or {}).get("joinUrl") or "").strip()
+    if not join:
+        return None, _error("That event has no Teams join URL — it may not be an online meeting.")
+    return join, None
+
+
+async def _get_meeting_transcript(args: dict) -> str:
+    from urllib.parse import quote
+
+    join, err = await _resolve_join_url(args.get("event_id", ""), args.get("join_url", ""))
+    if err:
+        return err
+    mid = _meeting_id_from_join_url(join)
+    if not mid:
+        return _error("Could not parse the Teams join URL into a meeting id.")
+    q = quote(mid, safe="")
+
+    r = await _graph_request("GET", f"/me/onlineMeetings/{q}/transcripts")
+    if r.status_code != 200:
+        return _error(r.text, r.status_code)
+    transcripts = r.json().get("value", [])
+    if not transcripts:
+        return "No transcript available for this meeting (transcription may have been off, or it's still processing)."
+    transcripts.sort(key=lambda t: t.get("createdDateTime", ""), reverse=True)
+
+    # Optionally pick a specific occurrence by date (YYYY-MM-DD); default = latest.
+    on_date = (args.get("on_date") or "").strip()[:10]
+    chosen = transcripts[0]
+    if on_date:
+        match = [t for t in transcripts if (t.get("createdDateTime", "")[:10] == on_date)]
+        if not match:
+            dates = ", ".join(sorted({t.get("createdDateTime", "")[:10] for t in transcripts}, reverse=True))
+            return f"No transcript for {on_date}. Available occurrence dates: {dates}"
+        chosen = match[0]
+
+    tid = chosen["id"]
+    c = await _graph_request(
+        "GET", f"/me/onlineMeetings/{q}/transcripts/{quote(tid, safe='')}/content",
+        params={"$format": "text/vtt"},
+    )
+    if c.status_code != 200:
+        return _error(c.text, c.status_code)
+    text = _clean_vtt(c.text)
+    if not text:
+        return "The transcript was empty after parsing."
+    dates = ", ".join(sorted({t.get("createdDateTime", "")[:10] for t in transcripts}, reverse=True))
+    header = (
+        f"Meeting transcript for {chosen.get('createdDateTime','')[:10]} "
+        f"({len(transcripts)} occurrence(s) available: {dates}):\n"
+    )
+    return header + text[:40000] + ("\n\n[... transcript truncated ...]" if len(text) > 40000 else "")
+
+
+def _extract_docx_text(data: bytes) -> str:
+    """Pull readable text out of a .docx (a zip containing word/document.xml)."""
+    import io
+    import zipfile
+    import re
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            xml = z.read("word/document.xml").decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    xml = re.sub(r"</w:p>", "\n", xml)          # paragraph breaks -> newlines
+    text = re.sub(r"<[^>]+>", "", xml)           # strip all tags
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+async def _find_meeting_files(args: dict) -> str:
+    query = args["query"].strip()
+    count = int(args.get("count", 15))
+    q_esc = query.replace("'", "''")
+    results: list[dict] = []
+
+    # 1) Search the user's own OneDrive
+    r = await _graph_request(
+        "GET", f"/me/drive/root/search(q='{q_esc}')",
+        params={"$top": count,
+                "$select": "id,name,webUrl,lastModifiedDateTime,parentReference,file,folder"},
+    )
+    if r.status_code in (401, 403):
+        return _error(
+            "Insufficient permissions to search files. The token needs the "
+            "Files.Read.All (and Sites.Read.All) scope — add it to the app "
+            "registration, get admin consent, and re-mint the token.", r.status_code)
+    if r.status_code == 200:
+        for it in r.json().get("value", []):
+            if it.get("folder"):
+                continue
+            pr = it.get("parentReference", {})
+            results.append({
+                "name": it.get("name", ""),
+                "drive_id": pr.get("driveId", ""),
+                "item_id": it.get("id", ""),
+                "modified": it.get("lastModifiedDateTime", ""),
+                "source": "My OneDrive",
+            })
+
+    # 2) Files shared with the user (covers meetings organized by others)
+    r2 = await _graph_request("GET", "/me/drive/sharedWithMe")
+    if r2.status_code == 200:
+        ql = query.lower()
+        for it in r2.json().get("value", []):
+            name = it.get("name", "")
+            if ql and ql not in name.lower():
+                continue
+            remote = it.get("remoteItem", {})
+            if remote.get("folder"):
+                continue
+            pr = remote.get("parentReference", {})
+            results.append({
+                "name": name,
+                "drive_id": pr.get("driveId", ""),
+                "item_id": remote.get("id", ""),
+                "modified": remote.get("lastModifiedDateTime", ""),
+                "source": "Shared with me",
+            })
+
+    seen: set = set()
+    lines = [f"Files matching '{query}':"]
+    found = 0
+    for f in results:
+        key = (f["drive_id"], f["item_id"])
+        if not f["item_id"] or key in seen:
+            continue
+        seen.add(key)
+        found += 1
+        lines.append(
+            f"\n• {f['name']}  [{f['source']}]"
+            f"\n    drive_id: {f['drive_id']}"
+            f"\n    item_id:  {f['item_id']}"
+            f"\n    modified: {_fmt_datetime(f['modified'])}"
+        )
+    if not found:
+        return f"No files found matching '{query}' in your OneDrive or shared files."
+    lines.insert(1, f"({found} found)")
+    lines.append("\nTo read a transcript, call read_meeting_file with a .vtt/.txt/.docx file's drive_id + item_id.")
+    return "\n".join(lines)
+
+
+async def _read_meeting_file(args: dict) -> str:
+    drive_id = args["drive_id"]
+    item_id = args["item_id"]
+
+    meta = await _graph_request(
+        "GET", f"/drives/{drive_id}/items/{item_id}", params={"$select": "name,file"})
+    if meta.status_code in (401, 403):
+        return _error(
+            "Insufficient permissions to read files. The token needs the "
+            "Files.Read.All (and Sites.Read.All) scope.", meta.status_code)
+    if meta.status_code != 200:
+        return _error(meta.text, meta.status_code)
+    name = meta.json().get("name", "")
+    lname = name.lower()
+
+    if lname.endswith((".mp4", ".mov", ".m4a", ".wav", ".mp3")):
+        return (f"'{name}' is a media recording, not a text transcript — I can't transcribe "
+                f"audio/video here. Look for a .vtt/.txt/.docx transcript file for this meeting.")
+
+    c = await _graph_request("GET", f"/drives/{drive_id}/items/{item_id}/content")
+    if c.status_code not in (200, 206):
+        return _error(c.text, c.status_code)
+    raw = c.content
+
+    if lname.endswith(".vtt"):
+        text = _clean_vtt(raw.decode("utf-8", errors="replace"))
+    elif lname.endswith((".txt", ".csv")):
+        text = raw.decode("utf-8", errors="replace").strip()
+    elif lname.endswith(".docx"):
+        text = _extract_docx_text(raw)
+    else:
+        text = raw.decode("utf-8", errors="replace").strip()
+        if not text or "\x00" in text[:200]:
+            return (f"'{name}' doesn't look like a readable text transcript "
+                    f"(unrecognized/binary format). Pick a .vtt/.txt/.docx file instead.")
+
+    if not text:
+        return f"'{name}' was empty after parsing."
+    header = f"Transcript from '{name}':\n"
+    return header + text[:15000] + ("\n\n[... truncated ...]" if len(text) > 15000 else "")
 
 
 async def _get_my_profile(args: dict) -> str:
