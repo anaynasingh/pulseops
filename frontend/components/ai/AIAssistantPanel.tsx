@@ -36,8 +36,6 @@ const QUICK_PROMPTS = [
   "What's due this week?",
 ];
 
-type Engine = "gpt" | "claude";
-
 // The Claude assistant proposes tasks by emitting a <<<PROPOSE_TASKS>>> {json} block
 // instead of creating them. Parse it out so we can render the same select + dedupe UI.
 function parseProposeBlock(
@@ -68,12 +66,7 @@ export function AIAssistantPanel() {
   const { toggleAIAssistant } = useUIStore();
   const queryClient = useQueryClient();
   const STORAGE_KEY = "pulseops_chat_history";
-  const ENGINE_KEY = "pulseops_chat_engine";
   const CLAUDE_SESSION_KEY = "pulseops_claude_session";
-  const [engine, setEngine] = useState<Engine>(() => {
-    if (typeof window === "undefined") return "gpt";
-    return (localStorage.getItem(ENGINE_KEY) as Engine) || "gpt";
-  });
   const [claudeSession, setClaudeSession] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(CLAUDE_SESSION_KEY);
@@ -93,8 +86,8 @@ export function AIAssistantPanel() {
   const [m365Connected, setM365Connected] = useState<boolean | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Whether this user has connected their own Microsoft account. Only relevant to
-  // the Claude engine (mail/transcript tools); GPT engine doesn't use it.
+  // Whether this user has connected their own Microsoft account (for the assistant's
+  // mail/calendar/transcript tools).
   useEffect(() => {
     let cancelled = false;
     authApi.m365Status()
@@ -106,10 +99,6 @@ export function AIAssistantPanel() {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
   }, [messages]);
-
-  useEffect(() => {
-    try { localStorage.setItem(ENGINE_KEY, engine); } catch {}
-  }, [engine]);
 
   useEffect(() => {
     try {
@@ -129,103 +118,48 @@ export function AIAssistantPanel() {
     setInput("");
     setLoading(true);
 
-    if (engine === "claude") {
-      try {
-        const res = await aiApi.claudeChat(text, claudeSession);
-        if (res.session_id) setClaudeSession(res.session_id);
+    try {
+      const res = await aiApi.claudeChat(text, claudeSession);
+      if (res.session_id) setClaudeSession(res.session_id);
 
-        // The assistant proposes new tasks via a structured block rather than
-        // creating them — route those into the same select + dedupe flow as GPT.
-        const proposal = parseProposeBlock(res.reply || "");
-        const replyText = (proposal ? proposal.cleanedReply : res.reply) || "Claude finished but returned no text.";
-        setMessages((m) => [...m, { role: "assistant", content: replyText, checking: !!(proposal && proposal.tasks.length) }]);
+      // The assistant proposes new tasks via a structured block rather than
+      // creating them — route those into the select + dedupe flow.
+      const proposal = parseProposeBlock(res.reply || "");
+      const replyText = (proposal ? proposal.cleanedReply : res.reply) || "The assistant finished but returned no text.";
+      setMessages((m) => [...m, { role: "assistant", content: replyText, checking: !!(proposal && proposal.tasks.length) }]);
 
-        if (proposal && proposal.tasks.length > 0) {
-          try {
-            const dedup = await aiApi.checkDuplicates(proposal.tasks as unknown as Record<string, unknown>[], text);
-            const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
-            if (hasIssues) {
-              setDedupeResult(dedup);
-              setDedupeProjectId(proposal.projectId || undefined);
-              setMessages((m) => m.map((msg, i) => (i === m.length - 1 ? { ...msg, checking: false } : msg)));
-            } else {
-              setMessages((m) => m.map((msg, i) => (i === m.length - 1
-                ? { ...msg, checking: false, proposedTasks: proposal.tasks, proposedProjectId: proposal.projectId, tasksConfirmed: false }
-                : msg)));
-            }
-          } catch {
+      if (proposal && proposal.tasks.length > 0) {
+        try {
+          const dedup = await aiApi.checkDuplicates(proposal.tasks as unknown as Record<string, unknown>[], text);
+          const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
+          if (hasIssues) {
+            setDedupeResult(dedup);
+            setDedupeProjectId(proposal.projectId || undefined);
+            setMessages((m) => m.map((msg, i) => (i === m.length - 1 ? { ...msg, checking: false } : msg)));
+          } else {
             setMessages((m) => m.map((msg, i) => (i === m.length - 1
               ? { ...msg, checking: false, proposedTasks: proposal.tasks, proposedProjectId: proposal.projectId, tasksConfirmed: false }
               : msg)));
           }
-        } else {
-          // No proposal — the assistant may have completed/moved/deleted something. Refresh.
-          queryClient.invalidateQueries({ queryKey: ["projects"] });
-          queryClient.invalidateQueries({ queryKey: ["my-dashboard"] });
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
-        }
-      } catch (e: unknown) {
-        const err = e as { response?: { status?: number; data?: { detail?: string } } };
-        const detail = err.response?.data?.detail;
-        const content =
-          err.response?.status === 503
-            ? "Claude bridge isn't running on your machine. Start it with:\n\n`cd claude-bridge`\n`python bridge.py`"
-            : detail || "Something went wrong talking to Claude Code. Check the bridge terminal for errors.";
-        setMessages((m) => [...m, { role: "assistant", content }]);
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    try {
-      // Build plain-text history from existing messages (skip initial greeting, cap at 20)
-      const history = messages
-        .filter((m) => m.content && !m.proposedTasks)
-        .slice(-20)
-        .map((m) => ({ role: m.role, content: m.content }));
-
-      const res = await aiApi.chat(text, undefined, history);
-
-      if (res.action === "propose_tasks" && res.proposed_tasks?.length > 0) {
-        // Add the reply first, with a checking indicator
-        setMessages((m) => [...m, { role: "assistant", content: res.reply, checking: true }]);
-        try {
-          const dedup = await aiApi.checkDuplicates(res.proposed_tasks, text);
-          const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
-          if (hasIssues) {
-            setDedupeResult(dedup);
-            setDedupeProjectId(res.project_id || undefined);
-            setMessages((m) => m.map((msg, i) =>
-              i === m.length - 1 ? { ...msg, checking: false } : msg
-            ));
-          } else {
-            setMessages((m) => m.map((msg, i) =>
-              i === m.length - 1
-                ? { ...msg, checking: false, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
-                : msg
-            ));
-          }
         } catch {
-          setMessages((m) => m.map((msg, i) =>
-            i === m.length - 1
-              ? { ...msg, checking: false, proposedTasks: res.proposed_tasks, proposedProjectId: res.project_id || null, tasksConfirmed: false }
-              : msg
-          ));
+          setMessages((m) => m.map((msg, i) => (i === m.length - 1
+            ? { ...msg, checking: false, proposedTasks: proposal.tasks, proposedProjectId: proposal.projectId, tasksConfirmed: false }
+            : msg)));
         }
       } else {
-        const answer = res.reply || "I analyzed your workspace but couldn't generate a response.";
-        setMessages((m) => [...m, { role: "assistant", content: answer }]);
-        // If AI created something, refresh the board/projects data
-        if (res.action === "created_project" || res.action === "created_task") {
-          queryClient.invalidateQueries({ queryKey: ["projects"] });
-        }
+        // No proposal — the assistant may have completed/moved/deleted something. Refresh.
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
+        queryClient.invalidateQueries({ queryKey: ["my-dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "I'm having trouble connecting to the AI service. Please check your API configuration." },
-      ]);
+    } catch (e: unknown) {
+      const err = e as { response?: { status?: number; data?: { detail?: string } } };
+      const detail = err.response?.data?.detail;
+      const content =
+        err.response?.status === 503
+          ? "The assistant service isn't reachable right now. Please try again in a moment."
+          : detail || "Something went wrong talking to the assistant. Please try again.";
+      setMessages((m) => [...m, { role: "assistant", content }]);
     } finally {
       setLoading(false);
     }
@@ -248,18 +182,6 @@ export function AIAssistantPanel() {
         <span className="text-indigo-400 ai-pulse">✦</span>
         <span className="text-sm font-semibold text-white flex-1">AI Assistant</span>
         <button
-          onClick={() => setEngine((e) => (e === "gpt" ? "claude" : "gpt"))}
-          title="Click to switch AI engine"
-          className={cn(
-            "text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer",
-            engine === "claude"
-              ? "text-orange-500 bg-orange-500/10 border-orange-500/40 hover:bg-orange-500/20"
-              : "text-green-400 bg-green-900/30 border-green-800/40 hover:bg-green-900/50"
-          )}
-        >
-          {engine === "claude" ? "Claude Code" : "GPT-4o"} ⇄
-        </button>
-        <button
           onClick={() => { const initial = [{ role: "assistant" as const, content: "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?" }]; setMessages(initial); setClaudeSession(null); try { localStorage.removeItem(STORAGE_KEY); } catch {} }}
           className="text-slate-600 hover:text-slate-400 transition-colors text-[10px]"
           title="Clear chat"
@@ -271,8 +193,8 @@ export function AIAssistantPanel() {
         </button>
       </div>
 
-      {/* Microsoft connect prompt — only for the Claude engine, which reads mail/transcripts */}
-      {engine === "claude" && m365Connected === false && (
+      {/* Microsoft connect prompt — lets the assistant read the user's own mail/meetings */}
+      {m365Connected === false && (
         <div className="px-3 py-2 border-b border-slate-800/60 bg-indigo-950/20 flex items-center gap-2">
           <span className="text-[11px] text-slate-300 flex-1 leading-snug">
             Connect Microsoft so the assistant can read <b>your</b> emails &amp; meetings.
@@ -285,7 +207,7 @@ export function AIAssistantPanel() {
           </button>
         </div>
       )}
-      {engine === "claude" && m365Connected === true && (
+      {m365Connected === true && (
         <div className="px-3 py-1.5 border-b border-slate-800/60 flex items-center gap-2">
           <span className="text-[10px] text-green-400 flex-1">✓ Microsoft connected</span>
           <button
@@ -377,7 +299,7 @@ export function AIAssistantPanel() {
         {loading && (
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-500 max-w-[90%]">
             <span className="ai-pulse text-indigo-400">✦</span>{" "}
-            {engine === "claude" ? "Claude is working on it… this can take a minute or two" : "Thinking…"}
+            Working on it… this can take a minute or two
           </div>
         )}
         <div ref={bottomRef} />
