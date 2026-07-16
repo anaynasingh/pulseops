@@ -707,7 +707,7 @@ async def claude_chat(
     import base64
     import secrets
     import httpx
-    from app.core.crypto import decrypt_str
+    from app.core.crypto import decrypt_str, encrypt_str
 
     bridge_url = os.getenv("CLAUDE_BRIDGE_URL", "http://localhost:8765").rstrip("/")
     # Shared secret for a remote (Railway) bridge. Must match BRIDGE_SECRET on
@@ -747,7 +747,21 @@ async def claude_chat(
                 headers=headers,
             )
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            # Persist a refreshed/rotated Microsoft token so it never goes stale
+            # (the reason users kept having to reconnect). The bridge returns the
+            # updated cache only when it changed. Strip it before replying so the
+            # token never reaches the browser.
+            if isinstance(data, dict):
+                new_cache_b64 = data.pop("m365_token_b64", None)
+                if new_cache_b64:
+                    try:
+                        cache_json = base64.b64decode(new_cache_b64).decode("utf-8")
+                        current_user.m365_token_cache = encrypt_str(cache_json)
+                        await db.commit()
+                    except Exception:
+                        logger.warning("Could not persist refreshed M365 token for user %s", current_user.id)
+            return data
     except (httpx.ConnectError, httpx.ConnectTimeout):
         raise HTTPException(
             status_code=503,
