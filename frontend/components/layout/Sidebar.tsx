@@ -177,7 +177,7 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
 
       {/* User */}
       {user && (
-        <div className="px-3 py-3 border-t border-slate-800/60">
+        <div className="px-3 py-3 border-t border-slate-800/60 space-y-2">
           <div className="flex items-center gap-2.5 px-2">
             <div className="w-7 h-7 rounded-full bg-indigo-700 flex items-center justify-center shrink-0">
               <span className="text-white text-xs font-medium">{initials(user.name)}</span>
@@ -186,14 +186,19 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
               <p className="text-xs text-white font-medium truncate">{user.name}</p>
               <p className="text-[10px] text-slate-500 truncate">{user.role}</p>
             </div>
-            <button
-              onClick={() => { clearAuth(); router.push("/login"); }}
-              className="text-slate-600 hover:text-slate-400 text-xs transition-colors"
-              title="Sign out"
-            >
-              ⎋
-            </button>
           </div>
+          <button
+            onClick={() => { clearAuth(); router.push("/login"); }}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:bg-red-600/20 hover:border-red-500/60 transition-colors text-xs font-medium"
+            title="Sign out of PulseOps"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Sign out
+          </button>
         </div>
       )}
     </aside>
