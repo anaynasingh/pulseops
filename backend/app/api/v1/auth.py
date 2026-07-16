@@ -4,7 +4,7 @@ import secrets
 import httpx
 import msal
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from app.db.session import get_db
@@ -198,27 +198,43 @@ async def microsoft_connect(current_user: User = Depends(get_current_user)) -> d
     return {"auth_url": auth_url}
 
 
+def _m365_connect_result(status: str) -> HTMLResponse:
+    """Report the connect result to the popup opener and close it; if this wasn't
+    opened as a popup, fall back to the app URL with ?m365=<status>."""
+    fallback = f"{settings.FRONTEND_URL}/?m365={status}"
+    done = "succeeded" if status == "connected" else "did not complete"
+    html = (
+        "<!doctype html><html><body><script>(function(){"
+        "var m={source:'pulseops-m365-connect',status:'" + status + "'};"
+        "try{if(window.opener){window.opener.postMessage(m,'*');window.close();return;}}catch(e){}"
+        "window.location.replace('" + fallback + "');"
+        "})();</script>"
+        "<p style=\"font:14px sans-serif;padding:16px\">Microsoft connection " + done +
+        ". You can close this window.</p></body></html>"
+    )
+    return HTMLResponse(html)
+
+
 @router.get("/microsoft/connect/callback")
 async def microsoft_connect_callback(
     code: str = "",
     state: str = "",
     error: str = "",
     db: AsyncSession = Depends(get_db),
-) -> RedirectResponse:
-    """OAuth redirect target. Exchanges the code, captures the user's MSAL token
-    cache (incl. refresh token), and stores it encrypted on their user row."""
-    done_redirect = f"{settings.FRONTEND_URL}/?m365="
+) -> HTMLResponse:
+    """OAuth redirect target (opened in a popup). Exchanges the code, stores the
+    user's encrypted MSAL cache, and closes the popup reporting the result."""
     if error or not code or not state:
-        return RedirectResponse(url=f"{done_redirect}error")
+        return _m365_connect_result("error")
 
     claims = decode_token(state)
     if not claims or claims.get("purpose") != "m365_connect":
-        return RedirectResponse(url=f"{done_redirect}invalid_state")
+        return _m365_connect_result("invalid_state")
 
     result_db = await db.execute(select(User).where(User.id == claims["sub"]))
     user = result_db.scalar_one_or_none()
     if not user or not user.is_active:
-        return RedirectResponse(url=f"{done_redirect}user_not_found")
+        return _m365_connect_result("user_not_found")
 
     cache = msal.SerializableTokenCache()
     result = _msal_app(cache).acquire_token_by_authorization_code(
@@ -227,12 +243,12 @@ async def microsoft_connect_callback(
         redirect_uri=settings.AZURE_CONNECT_REDIRECT_URI,
     )
     if "access_token" not in result:
-        return RedirectResponse(url=f"{done_redirect}exchange_failed")
+        return _m365_connect_result("exchange_failed")
 
     user.m365_token_cache = encrypt_str(cache.serialize())
     user.m365_connected_at = datetime.now(timezone.utc)
     await db.commit()
-    return RedirectResponse(url=f"{done_redirect}connected")
+    return _m365_connect_result("connected")
 
 
 @router.get("/microsoft/connect/status")

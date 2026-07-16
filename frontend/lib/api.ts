@@ -47,6 +47,9 @@ export const authApi = {
     if (!url) throw new Error("No Microsoft authorization URL returned.");
     window.location.href = url;
   },
+  // Just fetch the Microsoft sign-in URL (used to drive a popup without navigating).
+  m365AuthUrl: () =>
+    api.get("/auth/microsoft/connect").then((r) => r.data?.auth_url as string | undefined),
   m365Disconnect: () => api.post("/auth/microsoft/disconnect").then((r) => r.data),
 };
 

@@ -130,18 +130,57 @@ export function AssistantChat({
     window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
   }, []);
 
-  // Kick off the Microsoft connect flow. On success this redirects the browser to
-  // Microsoft (so the "connecting" state shows until it navigates away); on a fetch
-  // failure we surface an error instead of silently doing nothing.
+  // Run the Microsoft connect flow in a POPUP so the current page never reloads.
+  // The popup is opened synchronously (within the click) so it isn't blocked, then
+  // pointed at the sign-in URL; the callback posts the result back and closes it.
   const startConnect = async () => {
     setConnectError(null);
+    const popup = window.open("about:blank", "pulseops_m365_connect", "width=520,height=660");
     setConnecting(true);
+
+    let authUrl: string | undefined;
     try {
-      await authApi.m365Connect();
+      authUrl = await authApi.m365AuthUrl();
     } catch {
+      authUrl = undefined;
+    }
+    if (!authUrl) {
+      try { popup?.close(); } catch {}
       setConnecting(false);
       setConnectError("Couldn't start Microsoft sign-in. Please try again.");
+      return;
     }
+    if (!popup) {
+      // Popup was blocked — fall back to a full-page redirect.
+      window.location.href = authUrl;
+      return;
+    }
+    popup.location.href = authUrl;
+
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const onMsg = (ev: MessageEvent) => {
+      const d = ev.data as { source?: string; status?: string } | null;
+      if (!d || d.source !== "pulseops-m365-connect") return;
+      const status = d.status || "error";
+      window.removeEventListener("message", onMsg);
+      if (timer) clearInterval(timer);
+      setConnecting(false);
+      if (status === "connected") { setM365Connected(true); setConnectError(null); }
+      else setConnectError(M365_ERRORS[status] || "Couldn't connect Microsoft. Please try again.");
+      try { popup.close(); } catch {}
+    };
+    window.addEventListener("message", onMsg);
+
+    // Fallback: if the user closes the popup without finishing, stop the spinner
+    // and re-check status (in case it did connect).
+    timer = setInterval(() => {
+      if (popup.closed) {
+        window.removeEventListener("message", onMsg);
+        if (timer) clearInterval(timer);
+        setConnecting(false);
+        authApi.m365Status().then((s) => setM365Connected(s.connected)).catch(() => {});
+      }
+    }, 800);
   };
 
   useEffect(() => {
