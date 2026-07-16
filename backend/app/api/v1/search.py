@@ -21,18 +21,29 @@ async def keyword_search(
     """Full-text keyword search across projects and tasks."""
     like = f"%{q}%"
 
+    # Lean project results: both consumers (the MCP search formatter and the web
+    # search page) show only id/title/description/status/priority/due/progress —
+    # they never read a project's nested tasks/insights/health_records here. So
+    # return just those scalar columns and load no relationships. This avoids the
+    # heavy multi-selectinload (all tasks+assignees, insights, health records for
+    # every match) that made search slow, with no change to what's displayed.
     projects_res = await db.execute(
         select(Project)
-        .options(selectinload(Project.owner),
-                 # eager-load each task's assignee too — ProjectOut serializes
-                 # nested tasks, and a lazy task.assignee load here throws
-                 # MissingGreenlet under async SQLAlchemy (500).
-                 selectinload(Project.tasks).selectinload(Task.assignee),
-                 selectinload(Project.insights), selectinload(Project.health_records))
         .where(or_(Project.title.ilike(like), Project.description.ilike(like)))
         .limit(20)
     )
-    projects = [ProjectOut.model_validate(p) for p in projects_res.scalars().all()]
+    projects = [
+        {
+            "id": str(p.id),
+            "title": p.title,
+            "description": p.description,
+            "status": p.status.value if hasattr(p.status, "value") else str(p.status),
+            "priority": p.priority.value if hasattr(p.priority, "value") else str(p.priority),
+            "due_date": p.due_date.isoformat() if p.due_date else None,
+            "progress_pct": p.progress_pct,
+        }
+        for p in projects_res.scalars().all()
+    ]
 
     tasks_res = await db.execute(
         select(Task)
