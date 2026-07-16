@@ -38,6 +38,32 @@ const QUICK_PROMPTS = [
 
 type Engine = "gpt" | "claude";
 
+// The Claude assistant proposes tasks by emitting a <<<PROPOSE_TASKS>>> {json} block
+// instead of creating them. Parse it out so we can render the same select + dedupe UI.
+function parseProposeBlock(
+  reply: string
+): { tasks: ProposedTask[]; projectId: string | null; cleanedReply: string } | null {
+  const m = reply.match(/<<<PROPOSE_TASKS>>>([\s\S]*?)<<<END_PROPOSE_TASKS>>>/);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1].trim());
+    const raw = Array.isArray(parsed?.tasks) ? parsed.tasks : [];
+    const tasks: ProposedTask[] = raw
+      .filter((t: Record<string, unknown>) => t && t.title)
+      .map((t: Record<string, unknown>) => ({
+        title: String(t.title),
+        description: (t.description as string) ?? null,
+        priority: (t.priority as string) ?? "medium",
+        assignee_name: (t.assignee_name as string) ?? null,
+        due_date_offset_days:
+          typeof t.due_date_offset_days === "number" ? (t.due_date_offset_days as number) : null,
+      }));
+    return { tasks, projectId: (parsed?.project_id as string) ?? null, cleanedReply: reply.replace(m[0], "").trim() };
+  } catch {
+    return null;
+  }
+}
+
 export function AIAssistantPanel() {
   const { toggleAIAssistant } = useUIStore();
   const queryClient = useQueryClient();
@@ -107,11 +133,37 @@ export function AIAssistantPanel() {
       try {
         const res = await aiApi.claudeChat(text, claudeSession);
         if (res.session_id) setClaudeSession(res.session_id);
-        setMessages((m) => [...m, { role: "assistant", content: res.reply || "Claude finished but returned no text." }]);
-        // Claude may have created/moved anything — refresh workspace data
-        queryClient.invalidateQueries({ queryKey: ["projects"] });
-        queryClient.invalidateQueries({ queryKey: ["my-dashboard"] });
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+
+        // The assistant proposes new tasks via a structured block rather than
+        // creating them — route those into the same select + dedupe flow as GPT.
+        const proposal = parseProposeBlock(res.reply || "");
+        const replyText = (proposal ? proposal.cleanedReply : res.reply) || "Claude finished but returned no text.";
+        setMessages((m) => [...m, { role: "assistant", content: replyText, checking: !!(proposal && proposal.tasks.length) }]);
+
+        if (proposal && proposal.tasks.length > 0) {
+          try {
+            const dedup = await aiApi.checkDuplicates(proposal.tasks as unknown as Record<string, unknown>[], text);
+            const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
+            if (hasIssues) {
+              setDedupeResult(dedup);
+              setDedupeProjectId(proposal.projectId || undefined);
+              setMessages((m) => m.map((msg, i) => (i === m.length - 1 ? { ...msg, checking: false } : msg)));
+            } else {
+              setMessages((m) => m.map((msg, i) => (i === m.length - 1
+                ? { ...msg, checking: false, proposedTasks: proposal.tasks, proposedProjectId: proposal.projectId, tasksConfirmed: false }
+                : msg)));
+            }
+          } catch {
+            setMessages((m) => m.map((msg, i) => (i === m.length - 1
+              ? { ...msg, checking: false, proposedTasks: proposal.tasks, proposedProjectId: proposal.projectId, tasksConfirmed: false }
+              : msg)));
+          }
+        } else {
+          // No proposal — the assistant may have completed/moved/deleted something. Refresh.
+          queryClient.invalidateQueries({ queryKey: ["projects"] });
+          queryClient.invalidateQueries({ queryKey: ["my-dashboard"] });
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        }
       } catch (e: unknown) {
         const err = e as { response?: { status?: number; data?: { detail?: string } } };
         const detail = err.response?.data?.detail;
