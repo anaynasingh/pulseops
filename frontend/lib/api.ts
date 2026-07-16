@@ -43,7 +43,9 @@ export const authApi = {
     ),
   m365Connect: async () => {
     const r = await api.get("/auth/microsoft/connect");
-    window.location.href = r.data.auth_url as string;
+    const url = r.data?.auth_url as string | undefined;
+    if (!url) throw new Error("No Microsoft authorization URL returned.");
+    window.location.href = url;
   },
   m365Disconnect: () => api.post("/auth/microsoft/disconnect").then((r) => r.data),
 };

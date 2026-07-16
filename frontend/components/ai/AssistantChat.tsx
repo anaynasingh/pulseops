@@ -36,6 +36,14 @@ const QUICK_PROMPTS = [
   "What's due this week?",
 ];
 
+// Friendly text for the ?m365=<code> the OAuth callback redirects back with.
+const M365_ERRORS: Record<string, string> = {
+  error: "Microsoft sign-in was cancelled or failed.",
+  invalid_state: "The sign-in link expired — please try again.",
+  exchange_failed: "Couldn't complete Microsoft sign-in — please try again.",
+  user_not_found: "Your PulseOps session wasn't found — sign in again, then retry.",
+};
+
 // The assistant proposes tasks by emitting a <<<PROPOSE_TASKS>>> {json} block instead
 // of creating them. Parse it out so we can render the select + dedupe UI.
 function parseProposeBlock(
@@ -95,6 +103,8 @@ export function AssistantChat({
   const [dedupeResult, setDedupeResult] = useState<any>(null);
   const [dedupeProjectId, setDedupeProjectId] = useState<string | undefined>();
   const [m365Connected, setM365Connected] = useState<boolean | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Whether this user has connected their own Microsoft account (for the assistant's
@@ -106,6 +116,33 @@ export function AssistantChat({
       .catch(() => { if (!cancelled) setM365Connected(null); });
     return () => { cancelled = true; };
   }, []);
+
+  // Reflect the OAuth callback result (?m365=connected|<error>) once, then clean the URL.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get("m365");
+    if (!r) return;
+    if (r === "connected") { setM365Connected(true); setConnectError(null); }
+    else setConnectError(M365_ERRORS[r] || "Couldn't connect Microsoft. Please try again.");
+    params.delete("m365");
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+  }, []);
+
+  // Kick off the Microsoft connect flow. On success this redirects the browser to
+  // Microsoft (so the "connecting" state shows until it navigates away); on a fetch
+  // failure we surface an error instead of silently doing nothing.
+  const startConnect = async () => {
+    setConnectError(null);
+    setConnecting(true);
+    try {
+      await authApi.m365Connect();
+    } catch {
+      setConnecting(false);
+      setConnectError("Couldn't start Microsoft sign-in. Please try again.");
+    }
+  };
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
@@ -223,16 +260,24 @@ export function AssistantChat({
 
         {/* Microsoft connect prompt — lets the assistant read the user's own mail/meetings */}
         {m365Connected === false && (
-          <div className="px-4 py-2 border-b border-slate-800/60 bg-indigo-950/20 shrink-0">
+          <div className={cn("px-4 py-2 border-b border-slate-800/60 shrink-0", connectError ? "bg-red-950/20" : "bg-indigo-950/20")}>
             <div className={cn("flex items-center gap-2", col)}>
-              <span className="text-[11px] text-slate-300 flex-1 leading-snug">
-                Connect Microsoft so the assistant can read <b>your</b> emails &amp; meetings.
+              <span className={cn("text-[11px] flex-1 leading-snug", connectError ? "text-red-300" : "text-slate-300")}>
+                {connectError ? (
+                  connectError
+                ) : connecting ? (
+                  "Connecting to Microsoft…"
+                ) : (
+                  <>Connect Microsoft so the assistant can read <b>your</b> emails &amp; meetings.</>
+                )}
               </span>
               <button
-                onClick={() => authApi.m365Connect()}
-                className="text-[10px] px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium whitespace-nowrap"
+                onClick={startConnect}
+                disabled={connecting}
+                className="text-[10px] px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-medium whitespace-nowrap flex items-center gap-1.5"
               >
-                Connect
+                {connecting && <span className="w-2.5 h-2.5 border border-white/40 border-t-white rounded-full animate-spin" />}
+                {connecting ? "Connecting…" : connectError ? "Try again" : "Connect"}
               </button>
             </div>
           </div>
