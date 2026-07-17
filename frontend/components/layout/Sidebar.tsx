@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore, useUIStore, useReminderStore } from "@/lib/store";
-import { ClaudeSetupModal } from "@/components/layout/ClaudeSetupModal";
+import { TokenModal } from "@/components/layout/TokenModal";
 import { useState } from "react";
 import { cn, initials } from "@/lib/utils";
 
@@ -25,7 +25,7 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
   const { sidebarOpen, toggleCommandPalette, theme, toggleTheme } = useUIStore();
-  const [showClaudeSetup, setShowClaudeSetup] = useState(false);
+  const [showToken, setShowToken] = useState(false);
   const { enabled: reminderEnabled, intervalMin, setEnabled: setReminderEnabled, setIntervalMin, show } = useReminderStore();
 
   if (!sidebarOpen) return null;
@@ -86,31 +86,22 @@ export function Sidebar({ onNavClick }: { onNavClick?: () => void }) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Claude connection status */}
+      {/* Task Planner token */}
       <div className="px-3 py-2 border-t border-slate-800/60">
         <button
-          onClick={() => setShowClaudeSetup(true)}
+          onClick={() => setShowToken(true)}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-800/50 transition-smooth group"
-          title={user?.mcp_setup_done ? "Claude connected — click to view setup guide" : "Claude not connected — click to set up"}
+          title="View your Task Planner token"
         >
-          {/* Status dot */}
-          <span className={`w-2 h-2 rounded-full shrink-0 ${user?.mcp_setup_done ? "bg-green-400" : "bg-amber-400 animate-pulse"}`} />
-          <span className={`text-xs ${user?.mcp_setup_done ? "text-green-400" : "text-amber-400"}`}>
-            Claude {user?.mcp_setup_done ? "connected" : "not connected"}
-          </span>
+          <span className="text-base leading-none">🔑</span>
+          <span className="text-xs text-slate-400">Task Planner token</span>
           <span className="ml-auto text-[10px] text-slate-600 group-hover:text-slate-400 transition-colors">
-            {user?.mcp_setup_done ? "guide" : "setup →"}
+            view →
           </span>
         </button>
       </div>
 
-      {showClaudeSetup && user && (
-        <ClaudeSetupModal
-          userName={user.name}
-          onDone={() => setShowClaudeSetup(false)}
-          onSkip={() => setShowClaudeSetup(false)}
-        />
-      )}
+      {showToken && <TokenModal onClose={() => setShowToken(false)} />}
 
       {/* Light / Dark mode toggle */}
       <div className="px-3 py-2 border-t border-slate-800/60">
