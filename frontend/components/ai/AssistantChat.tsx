@@ -8,26 +8,8 @@ import { PRIORITY_CONFIG } from "@/lib/types";
 import type { PriorityLevel } from "@/lib/types";
 import { DedupeModal } from "@/components/ai/DedupeModal";
 import { ChatMarkdown } from "@/components/ai/ChatMarkdown";
-
-interface ProposedTask {
-  title: string;
-  description?: string | null;
-  priority?: string;
-  assignee_name?: string | null;
-  due_date_offset_days?: number | null;
-}
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  checking?: boolean;   // true while dedup is running
-  proposedTasks?: ProposedTask[];
-  proposedProjectId?: string | null;
-  tasksConfirmed?: boolean;
-  confirmedCount?: number;
-}
-
-const GREETING = "Hi! I'm PulseOps AI. I can help you understand your projects, find blockers, generate summaries, and suggest priorities. What would you like to know?";
+import { useAssistantStore } from "@/lib/store";
+import type { ProposedTask } from "@/lib/store";
 
 const QUICK_PROMPTS = [
   "What should I focus on today?",
@@ -44,32 +26,6 @@ const M365_ERRORS: Record<string, string> = {
   user_not_found: "Your PulseOps session wasn't found — sign in again, then retry.",
 };
 
-// The assistant proposes tasks by emitting a <<<PROPOSE_TASKS>>> {json} block instead
-// of creating them. Parse it out so we can render the select + dedupe UI.
-function parseProposeBlock(
-  reply: string
-): { tasks: ProposedTask[]; projectId: string | null; cleanedReply: string } | null {
-  const m = reply.match(/<<<PROPOSE_TASKS>>>([\s\S]*?)<<<END_PROPOSE_TASKS>>>/);
-  if (!m) return null;
-  try {
-    const parsed = JSON.parse(m[1].trim());
-    const raw = Array.isArray(parsed?.tasks) ? parsed.tasks : [];
-    const tasks: ProposedTask[] = raw
-      .filter((t: Record<string, unknown>) => t && t.title)
-      .map((t: Record<string, unknown>) => ({
-        title: String(t.title),
-        description: (t.description as string) ?? null,
-        priority: (t.priority as string) ?? "medium",
-        assignee_name: (t.assignee_name as string) ?? null,
-        due_date_offset_days:
-          typeof t.due_date_offset_days === "number" ? (t.due_date_offset_days as number) : null,
-      }));
-    return { tasks, projectId: (parsed?.project_id as string) ?? null, cleanedReply: reply.replace(m[0], "").trim() };
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Shared AI Assistant chat. Rendered both as the slide-in side panel
  * (variant="panel", with an onClose) and as the full-page view (variant="page").
@@ -84,24 +40,20 @@ export function AssistantChat({
 }) {
   const isPage = variant === "page";
   const queryClient = useQueryClient();
-  const STORAGE_KEY = "pulseops_chat_history";
-  const CLAUDE_SESSION_KEY = "pulseops_claude_session";
-  const [claudeSession, setClaudeSession] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(CLAUDE_SESSION_KEY);
-  });
-  const [messages, setMessages] = useState<Message[]>(() => {
-    if (typeof window === "undefined") return [{ role: "assistant", content: GREETING }];
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [{ role: "assistant", content: GREETING }];
-  });
+
+  // Chat state and the long-running send request live in the global store, not
+  // here — so closing the panel or leaving the /assistant page (which unmounts
+  // this component) no longer aborts an in-flight request or loses its reply.
+  const messages = useAssistantStore((s) => s.messages);
+  const loading = useAssistantStore((s) => s.loading);
+  const dedupeResult = useAssistantStore((s) => s.dedupeResult);
+  const dedupeProjectId = useAssistantStore((s) => s.dedupeProjectId);
+  const sendMessage = useAssistantStore((s) => s.sendMessage);
+  const patchMessage = useAssistantStore((s) => s.patchMessage);
+  const clearChat = useAssistantStore((s) => s.clearChat);
+  const clearDedupe = useAssistantStore((s) => s.clearDedupe);
+
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [dedupeResult, setDedupeResult] = useState<any>(null);
-  const [dedupeProjectId, setDedupeProjectId] = useState<string | undefined>();
   const [m365Connected, setM365Connected] = useState<boolean | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -184,78 +136,15 @@ export function AssistantChat({
   };
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
-  }, [messages]);
-
-  useEffect(() => {
-    try {
-      if (claudeSession) localStorage.setItem(CLAUDE_SESSION_KEY, claudeSession);
-      else localStorage.removeItem(CLAUDE_SESSION_KEY);
-    } catch {}
-  }, [claudeSession]);
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const clearChat = () => {
-    setMessages([{ role: "assistant", content: GREETING }]);
-    setClaudeSession(null);
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
-  };
-
-  const handleSend = async (text: string = input) => {
+  const handleSend = (text: string = input) => {
     if (!text.trim() || loading) return;
-    const userMsg: Message = { role: "user", content: text };
-    setMessages((m) => [...m, userMsg]);
     setInput("");
-    setLoading(true);
-
-    try {
-      const res = await aiApi.claudeChat(text, claudeSession);
-      if (res.session_id) setClaudeSession(res.session_id);
-
-      // The assistant proposes new tasks via a structured block rather than
-      // creating them — route those into the select + dedupe flow.
-      const proposal = parseProposeBlock(res.reply || "");
-      const replyText = (proposal ? proposal.cleanedReply : res.reply) || "The assistant finished but returned no text.";
-      setMessages((m) => [...m, { role: "assistant", content: replyText, checking: !!(proposal && proposal.tasks.length) }]);
-
-      if (proposal && proposal.tasks.length > 0) {
-        try {
-          const dedup = await aiApi.checkDuplicates(proposal.tasks as unknown as Record<string, unknown>[], text);
-          const hasIssues = dedup.duplicates_found > 0 || dedup.updates_suggested > 0;
-          if (hasIssues) {
-            setDedupeResult(dedup);
-            setDedupeProjectId(proposal.projectId || undefined);
-            setMessages((m) => m.map((msg, i) => (i === m.length - 1 ? { ...msg, checking: false } : msg)));
-          } else {
-            setMessages((m) => m.map((msg, i) => (i === m.length - 1
-              ? { ...msg, checking: false, proposedTasks: proposal.tasks, proposedProjectId: proposal.projectId, tasksConfirmed: false }
-              : msg)));
-          }
-        } catch {
-          setMessages((m) => m.map((msg, i) => (i === m.length - 1
-            ? { ...msg, checking: false, proposedTasks: proposal.tasks, proposedProjectId: proposal.projectId, tasksConfirmed: false }
-            : msg)));
-        }
-      } else {
-        // No proposal — the assistant may have completed/moved/deleted something. Refresh.
-        queryClient.invalidateQueries({ queryKey: ["projects"] });
-        queryClient.invalidateQueries({ queryKey: ["my-dashboard"] });
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      }
-    } catch (e: unknown) {
-      const err = e as { response?: { status?: number; data?: { detail?: string } } };
-      const detail = err.response?.data?.detail;
-      const content =
-        err.response?.status === 503
-          ? "The assistant service isn't reachable right now. Please try again in a moment."
-          : detail || "Something went wrong talking to the assistant. Please try again.";
-      setMessages((m) => [...m, { role: "assistant", content }]);
-    } finally {
-      setLoading(false);
-    }
+    // Fire-and-forget: the request completes inside the store even if this
+    // component unmounts (panel closed / navigated away) before it returns.
+    void sendMessage(text, queryClient);
   };
 
   const bubble = (role: "user" | "assistant") =>
@@ -270,14 +159,14 @@ export function AssistantChat({
 
   return (
     <>
-      {dedupeResult && (
+      {dedupeResult ? (
         <DedupeModal
-          result={dedupeResult}
+          result={dedupeResult as React.ComponentProps<typeof DedupeModal>["result"]}
           projectId={dedupeProjectId}
-          onDone={() => { setDedupeResult(null); queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }); }}
-          onCancel={() => setDedupeResult(null)}
+          onDone={() => { clearDedupe(); queryClient.invalidateQueries({ queryKey: ["my-dashboard"] }); }}
+          onCancel={() => clearDedupe()}
         />
-      )}
+      ) : null}
       <div className="flex flex-col h-full min-h-0 bg-[#080f20]">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3.5 border-b border-slate-800 shrink-0">
@@ -369,9 +258,7 @@ export function AssistantChat({
                     tasks={msg.proposedTasks}
                     projectId={msg.proposedProjectId}
                     onConfirm={(count) => {
-                      setMessages((prev) =>
-                        prev.map((m, idx) => (idx === i ? { ...m, tasksConfirmed: true, confirmedCount: count } : m))
-                      );
+                      patchMessage(i, { tasksConfirmed: true, confirmedCount: count });
                       queryClient.invalidateQueries({ queryKey: ["projects"] });
                     }}
                   />
