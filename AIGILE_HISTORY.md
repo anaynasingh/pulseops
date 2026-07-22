@@ -97,3 +97,13 @@ This file keeps everything.
 **Steer:** Accept. Codex round 1: C1 [HIGH] concurrent-confirm TOCTOU race → fixed with `SELECT … FOR UPDATE` atomic claim; C2 [MED] existing-project test polluted real data → fixed with disposable `_reg` project + try/finally teardown. Round 2 (confirmation): C1/C2 confirmed resolved; C3 [MED] `progress_pct` not recalc'd on task creation → deferred (pre-existing app-wide behaviour; `create_task` has the same gap; out of intake scope).
 
 **Learnings:** (1) The "button does nothing" symptom was three independent bugs stacked (dropped subtasks, wrong invalidation key, server cache) — each had to be found separately; the react-query key mismatch (`["projects"]` vs `["projects-kanban"]`) passes typecheck and looks correct in isolation. (2) Codex's C3 was real but pre-existing and app-wide — verifying `create_task` had the identical gap turned a "regression" into a correctly-scoped deferral instead of scope creep into `tasks.py`. (3) `Task.project_id` is NOT NULL, so "standalone task" is not representable — every task route still needs a parent project; this constraint shaped Option C's three routes.
+
+### [2026-07-22] Burst: claude-bridge-live (closed by Orchestrator steer, probe waived)
+
+**Built:** Claude bridge service hardened for Railway deployment (branch `prep/claude-bridge-harden`, base bb3c8d2). Stream A — env-driven binding, m365 MCP wiring, headless auth guard (78306ca). Stream B — Dockerfile, Railway service config, .dockerignore (13ed87a). Stream C — Railway deploy runbook, M365 cache seeding docs, CHARTER amendments (4135ba2). 4 Codex rounds completed during build; local gate PASS.
+
+**Verify:** PARTIAL — local gate PASS; docker gate skipped (Route 2, Orchestrator steer 2026-07-08: Railway-side verification replaces the local docker gate). Formal /ag-probe live acceptance 1-8 NEVER RAN.
+
+**Steer:** Closed by Orchestrator steer 2026-07-22 without formal probe — explicit recorded exception. Orchestrator verified the deployed bridge working live on Railway and declared the deployed version good. Working state archived to `AIGILE_PLAN/closed/2026-07-08-claude-bridge-live-bb3c8d2/`. Code remains on `prep/claude-bridge-harden` (pushed to p33 + origin), not merged to master.
+
+**Learnings:** Route 2 (deploy-then-verify-live) left the burst in limbo when the live acceptance was informally satisfied but never formally recorded — the RESUME pointer outlived its usefulness. If a deploy-side verification route is chosen, the probe should be scheduled as the immediate next session action, not left as a standing pointer.

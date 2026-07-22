@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** mcp-longlived-apikey
-**Burst base:** b93641132e752836f4062e836de5f6887530b997
-**Plan reference:** AIGILE_PLAN/current/
-**Next action:** Run /ag-ship to ship mcp-longlived-apikey. Branch fix/mcp-longlived-apikey. NOTE: live TestApiKeyAuth suite not yet run (no local backend) — deferred to deploy per repo precedent.
-**Last updated:** 2026-07-06 (mcp-longlived-apikey steer=SHIP; Codex code-review skipped-hung, covered by plan-challenge + build-challenge PASS_CLEAN)
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Plan reference:** None
+**Next action:** Burst complete. Next: /ag-plan for meeting-transcript task intake (bell notifications).
+**Last updated:** 2026-07-22 (STATUS reconciled: mcp-longlived-apikey shipped 2026-07-06 per HISTORY but Phase was never flipped on master; claude-bridge-live archived to closed/ by Orchestrator steer, probe gate waived — bridge verified live on Railway by Orchestrator)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -34,13 +34,8 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream A (backend) builders:** claude
-**Stream A (backend) handoff head:** 66e2a73
-**Stream A (backend) status:** COMPLETE
+<!-- No active streams. -->
 
-**Stream B (mcp-server+docs) builders:** claude
-**Stream B (mcp-server+docs) handoff head:** a717fb3
-**Stream B (mcp-server+docs) status:** COMPLETE
 
 ## Gemini Reviews
 
@@ -86,3 +81,4 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - [2026-06-26] guide-modal-center — Claude setup "guide" modal now centers on viewport (createPortal to document.body, escaping the transformed sidebar containing block). PASS (build+tsc+eslint clean; Codex R1 lint error fixed, R2 process-artefact finding accepted as known-architecture). Steer=SHIP.
 - [2026-07-06] assignable-users-sso — GET /users/ now returns all logged-in users (or_(ms_oid, password_hash)), not just 3 password-seeded accounts; SSO users were excluded by password_hash-only filter. PASS (SQL compile + root-cause; ag-challenge PASS_CLEAN). Steer=SHIP, Codex skipped (2-line validated fix, noisy base range).
 - [2026-07-06] mcp-longlived-apikey — get_current_user accepts permanent User.api_key as bearer (non-JWT tokens); local pulseops MCP server uses PULSEOPS_API_KEY instead of email/password→JWT (connect once, no re-auth; also unblocks SSO users who had no password). PASS (static+3 adversarial passes; live TestApiKeyAuth deferred to deploy). Steer=SHIP; Codex code-review skipped (hung x2), covered by plan-challenge + build-challenge PASS_CLEAN.
+- [2026-07-22] claude-bridge-live — bridge service hardened + deployed to Railway from prep/claude-bridge-harden (env binding, m365 MCP wiring, Dockerfile, runbook). Closed by Orchestrator steer, probe waived (recorded exception): bridge verified working live by Orchestrator. Archived to closed/2026-07-08-claude-bridge-live-bb3c8d2/.
