@@ -160,8 +160,14 @@ async def _poll_user(
         window_start = max(cursor - SCAN_OVERLAP, window_start)
 
     events = await graph_service.list_calendar_events(token, _iso_z(window_start), _iso_z(poll_start))
-    seen_meeting_ids: set[str] = set()
 
+    # Group occurrences per online meeting: a recurring series shares one Graph
+    # meeting id, and /transcripts returns EVERY occurrence's transcript. Bind
+    # each transcript to the NEAREST PRECEDING occurrence start (clamped to the
+    # 24h window) - naive per-occurrence window checks overlap for daily
+    # recurrences and mislabel today's transcript as yesterday's (live finding,
+    # 2026-07-23 dev deploy).
+    series: dict[str, list[tuple[datetime, dict]]] = {}
     for event in events:
         join_url = ((event.get("onlineMeeting") or {}).get("joinUrl") or "").strip()
         if not join_url:
@@ -169,19 +175,27 @@ async def _poll_user(
         meeting_id = graph_service.meeting_id_from_join_url(join_url)
         if not meeting_id:
             continue
-        seen_meeting_ids.add(meeting_id)
-
         occurrence_start = parse_graph_datetime((event.get("start") or {}).get("dateTime", ""))
         if occurrence_start is None:
             continue
+        series.setdefault(meeting_id, []).append((occurrence_start, event))
+    seen_meeting_ids: set[str] = set(series.keys())
 
+    for meeting_id, occurrences in series.items():
+        occurrences.sort(key=lambda pair: pair[0])
         transcripts = await graph_service.list_meeting_transcripts(token, meeting_id)
         for entry in transcripts:
             created = parse_graph_datetime(entry.get("createdDateTime", ""))
-            # C2: bind each transcript to THIS occurrence by its created window;
-            # never rely on a default-latest pick.
-            if created is None or not (occurrence_start <= created <= occurrence_start + OCCURRENCE_WINDOW):
+            if created is None:
                 continue
+            # C2 (amended): nearest preceding occurrence within the 24h window.
+            candidates = [
+                (start, event) for start, event in occurrences
+                if start <= created <= start + OCCURRENCE_WINDOW
+            ]
+            if not candidates:
+                continue
+            occurrence_start, event = max(candidates, key=lambda pair: pair[0])
             row = await _ensure_transcript_row(
                 db, token, user, meeting_id, entry, event, occurrence_start, stats
             )

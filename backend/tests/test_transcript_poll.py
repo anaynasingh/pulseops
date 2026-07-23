@@ -219,6 +219,39 @@ async def test_only_transcripts_in_occurrence_window_are_ingested():
 
 
 @pytest.mark.asyncio
+async def test_transcript_binds_to_nearest_preceding_occurrence():
+    """C2 amended: for a daily recurring meeting the 24h windows of consecutive
+    occurrences overlap - a transcript created just after today's occurrence
+    must bind to TODAY, not to yesterday's occurrence processed first."""
+    user = _connected_user()
+    db = AsyncMock()
+    db.execute.return_value = _result(rows=[])  # retry sweep: none
+    join = "https://teams.microsoft.com/l/meetup-join/19%3am%40thread.v2/0?context=%7b%22Oid%22%3a%22o1%22%7d"
+    yesterday = {
+        "subject": "Dev Meeting",
+        "start": {"dateTime": "2026-07-22T10:30:00.0000000", "timeZone": "UTC"},
+        "onlineMeeting": {"joinUrl": join},
+    }
+    today = {
+        "subject": "Dev Meeting",
+        "start": {"dateTime": "2026-07-23T09:00:00.0000000", "timeZone": "UTC"},
+        "onlineMeeting": {"joinUrl": join},
+    }
+    todays_transcript = {"id": "t-today", "createdDateTime": "2026-07-23T09:02:00.0000000Z"}
+    ensured = AsyncMock(return_value=None)
+    with patch.object(transcript_poll_service.graph_service, "list_calendar_events", AsyncMock(return_value=[yesterday, today])), \
+         patch.object(transcript_poll_service.graph_service, "list_meeting_transcripts", AsyncMock(return_value=[todays_transcript])) as lister, \
+         patch.object(transcript_poll_service, "_ensure_transcript_row", ensured):
+        await transcript_poll_service._poll_user(
+            db, user, "tok", datetime(2026, 7, 23, 10, 0, tzinfo=timezone.utc),
+            {"users_polled": 0, "transcripts_ingested": 0, "proposed_created": 0},
+        )
+    lister.assert_awaited_once()  # one Graph call per series, not per occurrence
+    assert ensured.await_count == 1
+    assert ensured.await_args.args[6] == datetime(2026, 7, 23, 9, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
 async def test_extraction_attempted_at_most_once_per_tick():
     """A transcript whose extraction failed in the calendar loop is not re-sent
     to GPT-4o by the retry sweep in the same tick (peer-review finding)."""
