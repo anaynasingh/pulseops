@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Idle
-**Active burst:** None
-**Burst base:** None
-**Plan reference:** None
-**Next action:** Burst complete. Next: /ag-plan for meeting-transcript task intake (bell notifications).
-**Last updated:** 2026-07-22 (STATUS reconciled: mcp-longlived-apikey shipped 2026-07-06 per HISTORY but Phase was never flipped on master; claude-bridge-live archived to closed/ by Orchestrator steer, probe gate waived — bridge verified live on Railway by Orchestrator)
+**Phase:** Promoting
+**Active burst:** transcript-intake-bell
+**Burst base:** 52c42f2ea24968547e15e4c3fc26de4d9911c053
+**Plan reference:** AIGILE_PLAN/current/plan.md (round 2, PASS_CLEAN gate; round_2/preservation-check.md PASS)
+**Next action:** Run /ag-ship to ship transcript-intake-bell (retrospective complete 2026-07-23: retro at .aigile/retros/52c42f2.../round_0/plan.md, HAV empty-state validated, PENDING correction written, DEFERRED/CAPABILITIES updated)
+**Last updated:** 2026-07-23 (both streams built and committed; new unit suites green; pre-existing test_reminders failures confirmed env-caused AsyncMock/Py3.12, not burst-caused; live integration suites need a running backend - deferred to probe)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -34,7 +34,21 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-<!-- No active streams. -->
+**Stream A executor:** claude
+**Stream A dispatch:** inline
+**Stream A risk-tier:** 2
+**Stream A tier-basis:** declared
+**Stream A status:** DONE
+**Stream A artifact:** dev@52c42f2..HEAD (backend: poll service + proposed-tasks API; pytest 36/36 new tests)
+**Stream A handoff head:** None
+
+**Stream B executor:** general-purpose-builder
+**Stream B dispatch:** agent:general-purpose
+**Stream B risk-tier:** 2
+**Stream B tier-basis:** declared
+**Stream B status:** DONE
+**Stream B artifact:** dev@52c42f2..HEAD (frontend: bell/panel + vitest harness; vitest 7/7, tsc clean)
+**Stream B handoff head:** None
 
 
 ## Gemini Reviews
@@ -60,6 +74,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 - Codex adversarial-review: review-mquo3tdl-a0821i (status: resolved — C1/C2 confirmed fixed; C3 progress_pct deferred to DEFERRED.md, 2026-06-26)
 - Codex adversarial-review: thread 019f0358-27f9-7c70-a84b-947909a94919 (intake-default-assignee, base 33f8c43; status: resolved — verdict APPROVE, no material findings, 2026-06-26)
 - Codex adversarial-review: guide-modal-center (base ec8a597, branch mode; status: resolved — R1 set-state-in-effect lint error FIXED via render-time guard; R2 process-artefact finding re untracked AIGILE_PLAN/current accepted as known AI-gile resume-in-worktree architecture, not a deliverable defect; steer=SHIP, 2026-06-26)
+- Peer adversarial review: transcript-intake-bell (base 52c42f2; reviewer: peer via ag-review; verdict: 3 findings, no Critical; status: resolved 2026-07-23 — 2 findings fixed and committed, TLS verify=False finding deferred to Orchestrator as repo-wide posture; details in AIGILE_PLAN/current/review.md)
 - Codex adversarial-review: mcp-longlived-apikey (base b936411; status: SKIPPED — review hung twice at context-gathering (review-mr96bcna-u8k6ut, review-mr99fvw0-mdu6t7), never produced a verdict; both cancelled. Per Orchestrator steer, verification rests on the COMPLETED adversarial passes: Codex plan-challenge round 0 (6 findings absorbed + build-verified) + ag-challenge --build opus/Prosecution PASS_CLEAN (line-by-line diff review, 0 findings). 2026-07-06)
 ## Session Checkpoint
 
@@ -75,10 +90,8 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 <!-- Append completed Bursts. Keep last 5 entries. Full archive in AIGILE_HISTORY.md. -->
 <!-- Long-term burst sequence lives in AIGILE_PLAN/long-term/sequence.md. -->
 
-- [2026-06-25] assistant-task-prompts — task-focused AI quick prompts + per-user task context in /ai/chat. PASS (probe: 2 Codex HIGH fixed; ship Gemini: week-window + style). Shipped prod 2812192 (PR #6).
-- [2026-06-26] intake-functional — AI intake routes to project/task (user override + parent picker); confirm creates real Task rows, logs activity, busts kanban cache; fixed board-never-refreshes query-key bug. PASS (static+Codex; live deferred to prod deploy. Codex: C1 race + C2 test fixed, C3 progress_pct deferred; Gemini: 1 MEDIUM fixed). Shipped prod 63a8b48 (PR #8).
-- [2026-06-26] intake-default-assignee — intake confirm defaults new project owner_id + created task assigned_to to the confirming user (model_fields_set omit-vs-null; explicit override/null preserved; Route 2 existing owner untouched). PASS (static + Codex APPROVE 0 findings; live 24-test suite + API deferred to deploy per steer).
 - [2026-06-26] guide-modal-center — Claude setup "guide" modal now centers on viewport (createPortal to document.body, escaping the transformed sidebar containing block). PASS (build+tsc+eslint clean; Codex R1 lint error fixed, R2 process-artefact finding accepted as known-architecture). Steer=SHIP.
 - [2026-07-06] assignable-users-sso — GET /users/ now returns all logged-in users (or_(ms_oid, password_hash)), not just 3 password-seeded accounts; SSO users were excluded by password_hash-only filter. PASS (SQL compile + root-cause; ag-challenge PASS_CLEAN). Steer=SHIP, Codex skipped (2-line validated fix, noisy base range).
 - [2026-07-06] mcp-longlived-apikey — get_current_user accepts permanent User.api_key as bearer (non-JWT tokens); local pulseops MCP server uses PULSEOPS_API_KEY instead of email/password→JWT (connect once, no re-auth; also unblocks SSO users who had no password). PASS (static+3 adversarial passes; live TestApiKeyAuth deferred to deploy). Steer=SHIP; Codex code-review skipped (hung x2), covered by plan-challenge + build-challenge PASS_CLEAN.
 - [2026-07-22] claude-bridge-live — bridge service hardened + deployed to Railway from prep/claude-bridge-harden (env binding, m365 MCP wiring, Dockerfile, runbook). Closed by Orchestrator steer, probe waived (recorded exception): bridge verified working live by Orchestrator. Archived to closed/2026-07-08-claude-bridge-live-bb3c8d2/.
+- [2026-07-23] transcript-intake-bell — Graph transcript poll (per-user delegated tokens) -> GPT-4o action-item extraction -> per-user proposed-tasks bell with explicit-lists confirm + pre-add dedup; un-dormed internal router; RLS-safe shared progress recalc. PASS (pytest 37/37 new + vitest 7/7; ag-challenge PASS_CLEAN; peer review 2 fixed/1 deferred). Steer=SHIP, 4 rulings deferred to DEFERRED.md.

@@ -34,7 +34,7 @@ last_promoted: 2026-06-03
 - [ ] Complete backend API — all routers functional with working DB layer (auth, projects, tasks, kanban, ai, search, analytics)
 - [ ] Frontend connected to live backend — no mock data
 - [x] [2026-06-26] AI Intake flow working end-to-end: raw text → structured card → human confirmation → project created
-- [ ] Meeting Intelligence working: transcript upload → action items, decisions, tasks extracted
+- [x] [2026-07-23] Meeting Intelligence working: transcript upload → action items, decisions, tasks extracted
 - [ ] Email Intelligence working: email ingestion → tasks, people, deadlines extracted
 - [ ] Semantic search working: pgvector cosine similarity on projects and tasks
 - [ ] AI Assistant panel connected to GPT-4o with project context

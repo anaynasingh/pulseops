@@ -10,3 +10,9 @@
 - [2026-07-06] Marker-gated synthetic-user seeding against the shared live dev DB is a proven, repeatable test pattern (`seeded_api_keys`: `@pulseops.test` emails, `_run`/`AsyncSessionLocal`, own-rows-only teardown) — lets auth/credential paths be tested without a JWT and without risking real rows, even while the main suite is RED - burst: mcp-longlived-apikey
 - [2026-07-06] Two-adversarial-pass verification (completed Codex plan-challenge + Opus build-challenge with fix authority) is a viable ship gate when the Codex code-review gate is environmentally unavailable - burst: mcp-longlived-apikey
 
+- [2026-07-23] Meeting Intelligence end-to-end (transcript-intake-bell): Graph transcript auto-poll (10-min APScheduler) → GPT-4o action-item extraction → per-user proposed-tasks bell → explicit-lists confirm creating real kanban tasks with pre-add dedup. CHARTER objective marked complete.
+- [2026-07-23] Backend per-user delegated Microsoft Graph access: MSAL SerializableTokenCache from encrypted User.m365_token_cache, acquire_token_silent, re-encrypt on rotation (graph_service.acquire_user_token). Reusable for any Graph-backed feature (calendar, mail).
+- [2026-07-23] Frontend test harness live: vitest + RTL + jsdom, '@' alias per tsconfig; first FE tests green (7/7). Resolves DEFERRED [2026-06-25] "no frontend component test harness".
+- [2026-07-23] RLS-safe aggregate recalc pattern: recalc_project_progress on a plain service AsyncSessionLocal (no RLS ctx), post-commit, best-effort - reusable for derived aggregates the caller doesn't own.
+- [2026-07-23] Constraint-backed ingest dedup pattern: partial UNIQUE index + INSERT ... ON CONFLICT DO NOTHING (meeting_transcripts.graph_transcript_id) - safe under concurrent replicas.
+- [2026-07-23] Peer ag-review --wait completes synchronous adversarial review in-ceiling in this env (Codex adversarial-review historically hangs) - dependable code-review gate.
