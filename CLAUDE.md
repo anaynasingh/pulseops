@@ -118,6 +118,28 @@ and the formal steer checkpoint are all still required. STATUS Phase
 moves Building → Steering via probe only — a working deploy is not
 probe done.
 
+### Test verification economy
+
+Applies everywhere — inside `/ag-probe` or `/ag-challenge`, and equally in
+ad-hoc fix-and-verify work outside a formal skill invocation (e.g. chasing
+a CI failure directly on a PR during ship finalization). Wasting
+Orchestrator wall-clock time on unnecessary verification is itself a
+failure of AI-gile, not a merely suboptimal tactical choice.
+
+Never invoke a bare full-suite test command. Run `/ag-test` (or
+`scripts/ag-test-plan` directly) with an explicit scope and rationale —
+it computes what actually needs to run and, for a large/full-suite plan,
+shards the work across parallel Haiku subagents. See the skill for the
+full protocol.
+
+This rule previously lived as restated prose in `docs/probe-fix-phase-gate.md`
+step 4.5 and inside `ag-probe`/`ag-challenge`'s own skill files, and was
+violated three times across three different contexts precisely because
+each fix only propagated the rule to the specific skill file in play,
+never to a mechanism every path actually runs through. `ag-test-plan` /
+`/ag-test` is that mechanism — see `AIGILE_CORRECTIONS_ARCHIVE.md` for the
+incident history this absorbs.
+
 ### Codex invocation
 
 Never invoke `/codex:<cmd>` via the Skill tool. Claude Code's
