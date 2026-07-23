@@ -7,9 +7,9 @@
     "name": "Anayna Singh",
     "email": "anayna.singh@prospect33.com"
   },
-  "status": "in-flight",
+  "status": "finalised",
   "started_at": "2026-06-26T12:31:19Z",
-  "finalised_at": null,
+  "finalised_at": "2026-06-27T10:11:36Z",
   "phases": [
     {
       "name": "Building",
@@ -45,9 +45,23 @@
         "low": 0
       }
     },
-    "gemini": null
+    "gemini": {
+      "recorded_at": "2026-06-27T10:11:36Z",
+      "outcome": "PASS",
+      "pr_number": 10,
+      "notes": "2 review rounds: R1 swap typeof-document for useSyncExternalStore; R2 hoist callbacks to module scope. Both applied + resolved; final review clean (no comments)."
+    }
   },
-  "contributors": [],
-  "diff_stat": null,
+  "contributors": [
+    {
+      "name": "Anayna Singh",
+      "email": "anayna.singh@prospect33.com"
+    }
+  ],
+  "diff_stat": {
+    "files_changed": 11,
+    "insertions": 229,
+    "deletions": 10
+  },
   "reviewer_family": "codex"
 }
