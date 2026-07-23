@@ -6,7 +6,11 @@
 -- per-user PROPOSED tasks. The dashboard bell lists pending proposals; confirm
 -- creates real tasks rows.
 --
--- NOTE: the enum type is priority_level (underscore) as defined in schema.sql.
+-- NOTE: the LIVE database's enum type is prioritylevel (no underscore) - the
+-- live tables were created via the ORM (SAEnum default name), and the ORM
+-- binds ::prioritylevel casts. schema.sql's priority_level exists in the DB
+-- but is NOT what tasks/projects columns use. Verified against the live DB
+-- 2026-07-23 (first deploy failed with DatatypeMismatchError).
 
 CREATE TABLE IF NOT EXISTS proposed_tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -16,7 +20,7 @@ CREATE TABLE IF NOT EXISTS proposed_tasks (
     meeting_date DATE,
     title VARCHAR(500) NOT NULL,
     description TEXT,
-    priority priority_level DEFAULT 'medium',
+    priority prioritylevel DEFAULT 'medium',
     assignee_hint VARCHAR(255),
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     created_task_id UUID,
@@ -49,3 +53,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_meeting_transcripts_graph_transcript_id
 -- Per-user poll cursor: advances to poll-start only when that user's entire
 -- iteration completes without exception.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS m365_last_transcript_poll TIMESTAMPTZ;
+
+-- Corrective for tables created by the first (broken) version of this
+-- migration, which declared priority as priority_level: the ORM binds
+-- ::prioritylevel, so the mismatch aborts every proposal INSERT.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name='proposed_tasks' AND column_name='priority'
+               AND udt_name='priority_level') THEN
+    ALTER TABLE proposed_tasks ALTER COLUMN priority DROP DEFAULT;
+    ALTER TABLE proposed_tasks ALTER COLUMN priority TYPE prioritylevel USING priority::text::prioritylevel;
+    ALTER TABLE proposed_tasks ALTER COLUMN priority SET DEFAULT 'medium';
+  END IF;
+END $$;

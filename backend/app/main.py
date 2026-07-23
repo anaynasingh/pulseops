@@ -122,8 +122,9 @@ async def run_migrations():
         await db.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS block_reminded_at TIMESTAMPTZ"))
         await db.execute(text("ALTER TABLE request_intake ADD COLUMN IF NOT EXISTS suggested_item_type TEXT"))
         # 007_proposed_tasks.sql mirror (transcript intake bell) — keep byte-for-byte
-        # in sync with database/007_proposed_tasks.sql. NOTE: the enum type is
-        # priority_level (underscore) as defined in schema.sql.
+        # in sync with database/007_proposed_tasks.sql. NOTE: the LIVE enum type is
+        # prioritylevel (ORM default name; live tables were ORM-created) — NOT
+        # schema.sql's priority_level. Verified against the live DB 2026-07-23.
         await db.execute(text("""
             CREATE TABLE IF NOT EXISTS proposed_tasks (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -133,7 +134,7 @@ async def run_migrations():
                 meeting_date DATE,
                 title VARCHAR(500) NOT NULL,
                 description TEXT,
-                priority priority_level DEFAULT 'medium',
+                priority prioritylevel DEFAULT 'medium',
                 assignee_hint VARCHAR(255),
                 status VARCHAR(20) NOT NULL DEFAULT 'pending',
                 created_task_id UUID,
@@ -152,6 +153,20 @@ async def run_migrations():
         await db.execute(text("ALTER TABLE meeting_transcripts ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMPTZ"))
         await db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_meeting_transcripts_graph_transcript_id ON meeting_transcripts (graph_transcript_id) WHERE graph_transcript_id IS NOT NULL"))
         await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS m365_last_transcript_poll TIMESTAMPTZ"))
+        # Corrective for proposed_tasks created by the first (broken) 007, which
+        # declared priority as priority_level: the ORM binds ::prioritylevel, so
+        # the mismatch aborted every proposal INSERT.
+        await db.execute(text("""
+            DO $$ BEGIN
+              IF EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_name='proposed_tasks' AND column_name='priority'
+                           AND udt_name='priority_level') THEN
+                ALTER TABLE proposed_tasks ALTER COLUMN priority DROP DEFAULT;
+                ALTER TABLE proposed_tasks ALTER COLUMN priority TYPE prioritylevel USING priority::text::prioritylevel;
+                ALTER TABLE proposed_tasks ALTER COLUMN priority SET DEFAULT 'medium';
+              END IF;
+            END $$
+        """))
         await db.commit()
 
 

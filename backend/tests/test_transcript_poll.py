@@ -138,7 +138,7 @@ def _connected_user(cursor=None):
 async def test_clean_iteration_advances_cursor():
     user = _connected_user()
     db = AsyncMock()
-    db.execute.return_value = _result(rows=[user])
+    db.execute.side_effect = [_result(rows=[user.id]), _result(scalar=user)]
     with patch.object(transcript_poll_service, "AsyncSessionLocal", _fake_session_factory(db)), \
          patch.object(transcript_poll_service.graph_service, "acquire_user_token", AsyncMock(return_value="tok")), \
          patch.object(transcript_poll_service, "_poll_user", AsyncMock()) as poll_user:
@@ -157,7 +157,11 @@ async def test_failed_iteration_preserves_cursor_and_continues_batch():
     failing = _connected_user(cursor=old_cursor)
     healthy = _connected_user()
     db = AsyncMock()
-    db.execute.return_value = _result(rows=[failing, healthy])
+    db.execute.side_effect = [
+        _result(rows=[failing.id, healthy.id]),
+        _result(scalar=failing),
+        _result(scalar=healthy),
+    ]
 
     async def poll_side_effect(db_, user, *a, **k):
         if user is failing:
@@ -178,7 +182,7 @@ async def test_failed_iteration_preserves_cursor_and_continues_batch():
 async def test_missing_token_skips_user_without_cursor_advance():
     user = _connected_user(cursor=None)
     db = AsyncMock()
-    db.execute.return_value = _result(rows=[user])
+    db.execute.side_effect = [_result(rows=[user.id]), _result(scalar=user)]
     with patch.object(transcript_poll_service, "AsyncSessionLocal", _fake_session_factory(db)), \
          patch.object(transcript_poll_service.graph_service, "acquire_user_token", AsyncMock(return_value=None)), \
          patch.object(transcript_poll_service, "_poll_user", AsyncMock()) as poll_user:

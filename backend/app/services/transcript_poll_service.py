@@ -104,16 +104,24 @@ async def run_transcript_poll() -> dict:
     # connected user (peer-review finding, 2026-07-23).
     attempted_extractions: set = set()
     async with AsyncSessionLocal() as db:
+        # Iterate primitive ids and re-fetch each user inside its own try:
+        # a rollback expires every ORM object in the session, so holding User
+        # instances across iterations (or touching user.id in the except path)
+        # raises MissingGreenlet after any one user fails (live finding,
+        # 2026-07-23 dev deploy).
         result = await db.execute(
-            select(User).where(User.m365_token_cache.isnot(None), User.is_active == True)  # noqa: E712
+            select(User.id).where(User.m365_token_cache.isnot(None), User.is_active == True)  # noqa: E712
         )
-        users = result.scalars().all()
-        for user in users:
+        user_ids = list(result.scalars().all())
+        for user_id in user_ids:
             poll_start = datetime.now(timezone.utc)
             try:
+                user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+                if user is None:
+                    continue
                 token = await graph_service.acquire_user_token(db, user)
                 if token is None:
-                    logger.warning("transcript poll: no Graph token for user %s (skipped, cursor unchanged)", user.id)
+                    logger.warning("transcript poll: no Graph token for user %s (skipped, cursor unchanged)", user_id)
                     continue
                 stats["users_polled"] += 1
                 await _poll_user(db, user, token, poll_start, stats, attempted_extractions)
@@ -123,7 +131,7 @@ async def run_transcript_poll() -> dict:
                 await db.commit()
             except Exception:
                 await db.rollback()
-                logger.exception("transcript poll failed for user %s (cursor unchanged)", user.id)
+                logger.exception("transcript poll failed for user %s (cursor unchanged)", user_id)
     return stats
 
 
