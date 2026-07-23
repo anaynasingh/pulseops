@@ -172,7 +172,7 @@ export function ProposedTasksBell() {
                   </p>
                   {group.meetingDate && (
                     <p className="text-[10px] text-slate-500">
-                      {format(new Date(group.meetingDate), "d MMM yyyy")}
+                      {format(new Date(`${group.meetingDate}T00:00:00`), "d MMM yyyy")}
                     </p>
                   )}
                 </div>
