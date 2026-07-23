@@ -49,6 +49,10 @@ AIGILE_CORRECTIONS.md.aigile-backup
 .understand-anything/intermediate/
 .understand-anything/diff-overlay.json
 .understand-anything/tmp/
+.ua/intermediate/
+.ua/diff-overlay.json
+.ua/tmp/
+.ua/.trash-*/
 !.aigile/probe-rounds
 !.aigile/probe-rounds/**
 !.aigile/retros
