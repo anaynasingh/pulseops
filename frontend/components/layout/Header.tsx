@@ -1,6 +1,7 @@
 "use client";
 
 import { useUIStore } from "@/lib/store";
+import { ProposedTasksBell } from "@/components/layout/ProposedTasksBell";
 
 interface HeaderProps {
   title: string;
@@ -36,6 +37,9 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
           {actions}
         </div>
       )}
+
+      {/* Proposed tasks from meeting transcripts */}
+      <ProposedTasksBell />
 
       {/* AI Assistant toggle */}
       <button

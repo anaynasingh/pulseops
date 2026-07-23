@@ -56,6 +56,38 @@ export interface Notification {
   created_at: string;
 }
 
+export type ProposedTaskStatus = "pending" | "accepted" | "dismissed";
+
+export interface ProposedTask {
+  id: string;
+  transcript_id: string;
+  meeting_title: string;
+  meeting_date: string | null;
+  title: string;
+  description: string | null;
+  priority: PriorityLevel;
+  assignee_hint: string | null;
+  status: ProposedTaskStatus;
+  dedup_status: string | null;
+  created_task_id: string | null;
+  proposed_at: string;
+}
+
+export type ProposedTaskOutcome =
+  | "created"
+  | "skipped_duplicate"
+  | "dismissed"
+  | "not_found"
+  | "already_handled";
+
+export interface ProposedTaskConfirmResult {
+  created: number;
+  skipped_duplicates: number;
+  dismissed: number;
+  tasks: Task[];
+  results: Array<{ proposed_id: string; outcome: ProposedTaskOutcome; task_id?: string }>;
+}
+
 export interface AIInsight {
   id: string;
   project_id?: string;

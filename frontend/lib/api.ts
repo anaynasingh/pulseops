@@ -133,6 +133,18 @@ export const aiApi = {
     api.post("/ai/apply-dedup-decisions", { confirmations, project_id }).then((r) => r.data),
 };
 
+// ── Proposed Tasks (meeting-transcript action items awaiting triage) ──────────
+
+export const proposedTasksApi = {
+  list: (status = "pending") =>
+    api.get("/proposed-tasks/", { params: { status } }).then((r) => r.data),
+  count: () => api.get("/proposed-tasks/count").then((r) => r.data),
+  // Explicit lists: accepted_ids are created, dismissed_ids are dismissed,
+  // anything in neither list stays pending (confirm never implicitly dismisses).
+  confirm: (accepted_ids: string[], dismissed_ids: string[], project_id?: string | null) =>
+    api.post("/proposed-tasks/confirm", { accepted_ids, dismissed_ids, project_id }).then((r) => r.data),
+};
+
 // ── Search ────────────────────────────────────────────────────────────────────
 
 export const searchApi = {
