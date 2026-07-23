@@ -99,6 +99,10 @@ async def run_transcript_poll() -> dict:
     Callers own poll_lock; this function does not acquire it.
     """
     stats = {"users_polled": 0, "transcripts_ingested": 0, "proposed_created": 0}
+    # One extraction attempt per transcript per tick: a failing extraction is
+    # not re-sent to GPT-4o by the retry sweep in the same tick, nor once per
+    # connected user (peer-review finding, 2026-07-23).
+    attempted_extractions: set = set()
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(User).where(User.m365_token_cache.isnot(None), User.is_active == True)  # noqa: E712
@@ -112,7 +116,7 @@ async def run_transcript_poll() -> dict:
                     logger.warning("transcript poll: no Graph token for user %s (skipped, cursor unchanged)", user.id)
                     continue
                 stats["users_polled"] += 1
-                await _poll_user(db, user, token, poll_start, stats)
+                await _poll_user(db, user, token, poll_start, stats, attempted_extractions)
                 # C3: the cursor advances to the poll-start timestamp ONLY when
                 # this user's entire iteration completed without exception.
                 user.m365_last_transcript_poll = poll_start
@@ -130,7 +134,16 @@ async def run_transcript_poll_locked() -> dict:
         return await run_transcript_poll()
 
 
-async def _poll_user(db: AsyncSession, user: User, token: str, poll_start: datetime, stats: dict) -> None:
+async def _poll_user(
+    db: AsyncSession,
+    user: User,
+    token: str,
+    poll_start: datetime,
+    stats: dict,
+    attempted_extractions: set | None = None,
+) -> None:
+    if attempted_extractions is None:
+        attempted_extractions = set()
     window_start = poll_start - MAX_LOOKBACK
     cursor = user.m365_last_transcript_poll
     if cursor is not None:
@@ -166,7 +179,8 @@ async def _poll_user(db: AsyncSession, user: User, token: str, poll_start: datet
             )
             if row is None:
                 continue
-            if row.extracted_at is None:
+            if row.extracted_at is None and row.id not in attempted_extractions:
+                attempted_extractions.add(row.id)
                 await _extract_transcript(db, row)
             stats["proposed_created"] += await _fan_out_proposals(db, user, row)
 
@@ -180,6 +194,9 @@ async def _poll_user(db: AsyncSession, user: User, token: str, poll_start: datet
         )
     )
     for row in stale_result.scalars().all():
+        if row.id in attempted_extractions:
+            continue
+        attempted_extractions.add(row.id)
         await _extract_transcript(db, row)
         if row.extracted_at is None:
             continue

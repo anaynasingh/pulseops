@@ -214,6 +214,27 @@ async def test_only_transcripts_in_occurrence_window_are_ingested():
     assert ensured.await_args.args[4]["id"] == "t-in"
 
 
+@pytest.mark.asyncio
+async def test_extraction_attempted_at_most_once_per_tick():
+    """A transcript whose extraction failed in the calendar loop is not re-sent
+    to GPT-4o by the retry sweep in the same tick (peer-review finding)."""
+    user = _connected_user()
+    stale_row = MagicMock()
+    stale_row.id = uuid4()
+    stale_row.extracted_at = None
+    db = AsyncMock()
+    db.execute.return_value = _result(rows=[stale_row])  # retry sweep picks it
+    extract = AsyncMock()
+    with patch.object(transcript_poll_service.graph_service, "list_calendar_events", AsyncMock(return_value=[])), \
+         patch.object(transcript_poll_service, "_extract_transcript", extract):
+        await transcript_poll_service._poll_user(
+            db, user, "tok", datetime(2026, 7, 23, tzinfo=timezone.utc),
+            {"users_polled": 0, "transcripts_ingested": 0, "proposed_created": 0},
+            attempted_extractions={stale_row.id},
+        )
+    extract.assert_not_awaited()
+
+
 # ── Proposal fan-out idempotency (C1 / R1-2) ─────────────────────────────────
 
 def _extracted_row(action_items, extracted=True):

@@ -81,7 +81,7 @@ export function ProposedTasksBell() {
       } else {
         byMeeting.set(key, {
           key,
-          meetingTitle: item.meeting_title,
+          meetingTitle: item.meeting_title ?? "Untitled meeting",
           meetingDate: item.meeting_date,
           items: [item],
         });

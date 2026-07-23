@@ -60,8 +60,8 @@ export type ProposedTaskStatus = "pending" | "accepted" | "dismissed";
 
 export interface ProposedTask {
   id: string;
-  transcript_id: string;
-  meeting_title: string;
+  transcript_id: string | null;
+  meeting_title: string | null;
   meeting_date: string | null;
   title: string;
   description: string | null;
