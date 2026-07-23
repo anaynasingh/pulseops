@@ -13,6 +13,46 @@ from app.core.deps import get_current_user, get_db_for_user, require_writer
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
+async def recalc_project_progress(project_id) -> None:
+    """Recalculate a project's progress_pct from its tasks' completion state.
+
+    Runs on a SERVICE-CONTEXT session (its own AsyncSessionLocal, no RLS user
+    ctx): projects has FORCE ROW LEVEL SECURITY with an owner/creator/admin-only
+    UPDATE policy, so an RLS-stamped session silently updates zero rows when the
+    caller does not own the project. progress_pct is derived aggregate data, not
+    user-authored content. Best-effort by contract (C8): callers invoke this
+    AFTER their own commit, and it never raises into a caller whose write
+    already committed.
+    """
+    if project_id is None:
+        return
+    from sqlalchemy import func
+    from app.db.session import AsyncSessionLocal
+    from app.models.models import Project
+    try:
+        async with AsyncSessionLocal() as db:
+            total = (await db.execute(
+                select(func.count()).select_from(Task).where(Task.project_id == project_id)
+            )).scalar() or 0
+            done = (await db.execute(
+                select(func.count()).select_from(Task).where(
+                    Task.project_id == project_id,
+                    Task.is_completed == True,  # noqa: E712
+                )
+            )).scalar() or 0
+            new_pct = int((done / total) * 100) if total > 0 else 0
+            result = await db.execute(select(Project).where(Project.id == project_id))
+            proj = result.scalar_one_or_none()
+            if proj:
+                proj.progress_pct = new_pct
+                await db.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "progress_pct recalc failed for project %s", project_id, exc_info=True
+        )
+
+
 async def _log_activity(db: AsyncSession, task_id, user_id, action: str, new_val: str = None):
     """Record a task action in the activity feed (mirrors projects._log_activity)."""
     db.add(ActivityLog(
@@ -143,6 +183,7 @@ async def create_task(
     await db.flush()  # populate task.id before logging
     await _log_activity(db, task.id, current_user.id, "task_created", task.title)
     await db.commit()
+    await recalc_project_progress(task.project_id)
     result = await db.execute(
         select(Task).options(selectinload(Task.assignee), selectinload(Task.project)).where(Task.id == task.id)
     )
@@ -187,6 +228,7 @@ async def update_task(
     if "assigned_to" in update_data and update_data["assigned_to"] != task.assigned_to:
         update_data["last_reminded_at"] = None
 
+    old_project_id = task.project_id
     for field, value in update_data.items():
         setattr(task, field, value)
 
@@ -194,28 +236,14 @@ async def update_task(
     await _log_activity(db, task.id, current_user.id, action, task.title)
     await db.commit()
 
-    # Auto-recalculate project progress_pct whenever a task completion changes
-    if "is_completed" in update_data or "status" in update_data:
-        from app.models.models import Project
-        from sqlalchemy import func
-        total = (await db.execute(
-            select(func.count()).select_from(Task).where(Task.project_id == task.project_id)
-        )).scalar() or 0
-        done = (await db.execute(
-            select(func.count()).select_from(Task).where(
-                Task.project_id == task.project_id,
-                Task.is_completed == True,
-            )
-        )).scalar() or 0
-        new_pct = int((done / total) * 100) if total > 0 else 0
-        await db.execute(
-            select(Project).where(Project.id == task.project_id)
-        )
-        proj_result = await db.execute(select(Project).where(Project.id == task.project_id))
-        proj = proj_result.scalar_one_or_none()
-        if proj:
-            proj.progress_pct = new_pct
-            await db.commit()
+    # Auto-recalculate progress_pct post-commit (best-effort, service session).
+    # On a project move (R1-5), BOTH the old and new project are recalculated
+    # so neither is left stale.
+    project_moved = "project_id" in update_data and task.project_id != old_project_id
+    if "is_completed" in update_data or "status" in update_data or project_moved:
+        await recalc_project_progress(task.project_id)
+        if project_moved:
+            await recalc_project_progress(old_project_id)
 
     result = await db.execute(
         select(Task).options(selectinload(Task.assignee), selectinload(Task.project)).where(Task.id == task_id)
@@ -241,6 +269,8 @@ async def delete_task(
         )
 
     title = task.title
+    project_id = task.project_id
     await db.delete(task)
     await _log_activity(db, task_id, current_user.id, "task_deleted", title)
     await db.commit()
+    await recalc_project_progress(project_id)

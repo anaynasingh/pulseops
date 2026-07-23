@@ -77,6 +77,9 @@ class User(Base):
     # Per-user Microsoft Graph token cache (MSAL, encrypted) for the in-app assistant.
     m365_token_cache: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     m365_connected_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Transcript poll cursor: advances to poll-start only when this user's entire
+    # poll iteration completes without exception (any failure leaves it unchanged).
+    m365_last_transcript_poll: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.contributor)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -330,7 +333,46 @@ class MeetingTranscript(Base):
     meeting_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     tasks_created: Mapped[bool] = mapped_column(Boolean, default=False)
     uploaded_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Graph ingestion bookkeeping (transcript poll). graph_transcript_id is the
+    # global dedup key (partial UNIQUE index); the constraint is the guarantee.
+    graph_transcript_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    graph_meeting_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Extraction-state marker: extraction success <=> extracted_at IS NOT NULL.
+    # Zero-action-item success = extracted_at set with action_items=[]. Retry and
+    # reuse checks key on this, never on action_items truthiness.
+    extracted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProposedTask(Base):
+    """A task extracted from a meeting transcript, staged per user for triage.
+
+    One shared meeting_transcripts row fans out to one ProposedTask set per
+    attending user. status: pending | accepted | dismissed. Confirm never
+    implicitly dismisses - a pending proposal left off both confirm lists stays
+    pending in the bell.
+    """
+    __tablename__ = "proposed_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    transcript_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("meeting_transcripts.id", ondelete="CASCADE"), nullable=True)
+    meeting_title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    meeting_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    priority: Mapped[PriorityLevel] = mapped_column(SAEnum(PriorityLevel), default=PriorityLevel.medium)
+    assignee_hint: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_task_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    dedup_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    dedup_existing_task_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    proposed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    handled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship("User")
 
 
 class EmailIngestion(Base):

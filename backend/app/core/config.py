@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # token cache at rest. Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     M365_TOKEN_ENC_KEY: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
+    # Shared secret for /internal/* endpoints (Railway Cron). Optional (C6): a
+    # falsy value makes the internal endpoints return 401 rather than crashing
+    # app boot, so local/test envs run with no cron secret configured.
+    CRON_SECRET: Optional[str] = None
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

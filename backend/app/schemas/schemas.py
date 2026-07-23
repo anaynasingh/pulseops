@@ -556,6 +556,48 @@ class TaskBalanceResponse(BaseModel):
     max_count: int
 
 
+# ── Proposed Tasks (transcript intake bell) ───────────────────────────────────
+
+class ProposedTaskOut(BaseModel):
+    id: UUID
+    transcript_id: Optional[UUID] = None
+    meeting_title: Optional[str] = None
+    meeting_date: Optional[date] = None
+    title: str
+    description: Optional[str] = None
+    priority: PriorityLevel
+    assignee_hint: Optional[str] = None
+    status: str
+    dedup_status: Optional[str] = None
+    created_task_id: Optional[UUID] = None
+    proposed_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProposedTasksConfirmRequest(BaseModel):
+    """Both lists are EXPLICIT: proposals in accepted_ids are created, proposals
+    in dismissed_ids are dismissed, and any pending proposal in NEITHER list
+    remains pending (stays in the bell for later triage)."""
+    accepted_ids: List[UUID] = Field(default_factory=list)
+    dismissed_ids: List[UUID] = Field(default_factory=list)
+    project_id: Optional[UUID] = None
+
+
+class ProposedTaskConfirmResult(BaseModel):
+    proposed_id: UUID
+    outcome: Literal["created", "skipped_duplicate", "dismissed", "not_found", "already_handled"]
+    task_id: Optional[UUID] = None
+
+
+class ProposedTasksConfirmOut(BaseModel):
+    created: int
+    skipped_duplicates: int
+    dismissed: int
+    tasks: List[TaskOut]
+    results: List[ProposedTaskConfirmResult]
+
+
 # Allow forward references
 ProjectOut.model_rebuild()
 CommentOut.model_rebuild()

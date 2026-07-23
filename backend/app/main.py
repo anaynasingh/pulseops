@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Scope, Receive, Send
 from app.core.config import settings
-from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics, users
+from app.api.v1 import auth, projects, tasks, kanban, ai, search, analytics, users, internal, proposed_tasks
 
 
 class SSEKeepAliveMiddleware:
@@ -121,7 +121,64 @@ async def run_migrations():
         await db.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMPTZ"))
         await db.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS block_reminded_at TIMESTAMPTZ"))
         await db.execute(text("ALTER TABLE request_intake ADD COLUMN IF NOT EXISTS suggested_item_type TEXT"))
+        # 007_proposed_tasks.sql mirror (transcript intake bell) — keep byte-for-byte
+        # in sync with database/007_proposed_tasks.sql. NOTE: the enum type is
+        # priority_level (underscore) as defined in schema.sql.
+        await db.execute(text("""
+            CREATE TABLE IF NOT EXISTS proposed_tasks (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                transcript_id UUID REFERENCES meeting_transcripts(id) ON DELETE CASCADE,
+                meeting_title TEXT,
+                meeting_date DATE,
+                title VARCHAR(500) NOT NULL,
+                description TEXT,
+                priority priority_level DEFAULT 'medium',
+                assignee_hint VARCHAR(255),
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                created_task_id UUID,
+                dedup_status VARCHAR(20),
+                dedup_existing_task_id UUID,
+                proposed_at TIMESTAMPTZ DEFAULT now(),
+                handled_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT now()
+            )
+        """))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_proposed_tasks_user_status ON proposed_tasks (user_id, status)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_proposed_tasks_transcript ON proposed_tasks (transcript_id)"))
+        await db.execute(text("ALTER TABLE meeting_transcripts ADD COLUMN IF NOT EXISTS graph_transcript_id VARCHAR(255)"))
+        await db.execute(text("ALTER TABLE meeting_transcripts ADD COLUMN IF NOT EXISTS graph_meeting_id VARCHAR(255)"))
+        await db.execute(text("ALTER TABLE meeting_transcripts ADD COLUMN IF NOT EXISTS truncated BOOLEAN DEFAULT FALSE"))
+        await db.execute(text("ALTER TABLE meeting_transcripts ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMPTZ"))
+        await db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_meeting_transcripts_graph_transcript_id ON meeting_transcripts (graph_transcript_id) WHERE graph_transcript_id IS NOT NULL"))
+        await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS m365_last_transcript_poll TIMESTAMPTZ"))
         await db.commit()
+
+
+@app.on_event("startup")
+async def start_transcript_poll_scheduler():
+    """In-process transcript poll every ~10 min (single-process Railway deploy;
+    replica scale-out via Railway Cron stays Deferred). max_instances=1 plus the
+    shared poll_lock (R1-1) serialize the job against manual internal triggers."""
+    import logging
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from app.services.transcript_poll_service import run_transcript_poll_locked
+
+        scheduler = AsyncIOScheduler(timezone="UTC")
+        scheduler.add_job(
+            run_transcript_poll_locked,
+            "interval",
+            minutes=10,
+            max_instances=1,
+            coalesce=True,
+            id="transcript-poll",
+        )
+        scheduler.start()
+        app.state.transcript_scheduler = scheduler
+        logging.getLogger(__name__).info("Transcript poll scheduler started (every 10 min)")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Transcript poll scheduler failed to start: {e}")
 
 # Capture MCP auth headers before every request (pure ASGI, not BaseHTTPMiddleware)
 app.add_middleware(MCPHeaderMiddleware)
@@ -145,6 +202,8 @@ app.include_router(ai.router, prefix=PREFIX)
 app.include_router(search.router, prefix=PREFIX)
 app.include_router(analytics.router, prefix=PREFIX)
 app.include_router(users.router, prefix=PREFIX)
+app.include_router(internal.router, prefix=PREFIX)
+app.include_router(proposed_tasks.router, prefix=PREFIX)
 
 
 @app.get("/health")
