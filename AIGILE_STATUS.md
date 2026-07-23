@@ -4,12 +4,12 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Current state
 
-**Phase:** Promoting
-**Active burst:** transcript-intake-bell
-**Burst base:** 52c42f2ea24968547e15e4c3fc26de4d9911c053
-**Plan reference:** AIGILE_PLAN/current/plan.md (round 2, PASS_CLEAN gate; round_2/preservation-check.md PASS)
-**Next action:** Run /ag-ship to ship transcript-intake-bell (retrospective complete 2026-07-23: retro at .aigile/retros/52c42f2.../round_0/plan.md, HAV empty-state validated, PENDING correction written, DEFERRED/CAPABILITIES updated)
-**Last updated:** 2026-07-23 (both streams built and committed; new unit suites green; pre-existing test_reminders failures confirmed env-caused AsyncMock/Py3.12, not burst-caused; live integration suites need a running backend - deferred to probe)
+**Phase:** Idle
+**Active burst:** None
+**Burst base:** None
+**Plan reference:** None
+**Next action:** Burst complete — transcript-intake-bell shipped to DEV ONLY per Orchestrator round_ship redirect (origin/dev + p33/dev; NO merge to P33 master, prod deploy NOT triggered). Verify on the dev server (bell renders, poll ingests a real Teams transcript, confirm creates tasks), then promote via /ag-ship RELEASE FLOW (dev → P33-AI master PR, Gemini blocking) when satisfied. /clear when ready.
+**Last updated:** 2026-07-23 (dev-only ship; burst archived to closed/2026-07-23-transcript-intake-bell-52c42f2; manifest finalised)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
 <!-- transition updates it. A new session reads this field via             -->
@@ -34,21 +34,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 
 ## Active streams
 
-**Stream A executor:** claude
-**Stream A dispatch:** inline
-**Stream A risk-tier:** 2
-**Stream A tier-basis:** declared
-**Stream A status:** DONE
-**Stream A artifact:** dev@52c42f2..HEAD (backend: poll service + proposed-tasks API; pytest 36/36 new tests)
-**Stream A handoff head:** None
-
-**Stream B executor:** general-purpose-builder
-**Stream B dispatch:** agent:general-purpose
-**Stream B risk-tier:** 2
-**Stream B tier-basis:** declared
-**Stream B status:** DONE
-**Stream B artifact:** dev@52c42f2..HEAD (frontend: bell/panel + vitest harness; vitest 7/7, tsc clean)
-**Stream B handoff head:** None
+<!-- No active streams. Last burst's stream blocks archived in closed/2026-07-23-transcript-intake-bell-52c42f2/ and the burst manifest. -->
 
 
 ## Gemini Reviews
