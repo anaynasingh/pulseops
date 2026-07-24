@@ -8,7 +8,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 **Active burst:** None
 **Burst base:** None
 **Plan reference:** None
-**Next action:** PR #41 (dev -> P33 master, transcript-intake-bell + live-hardening fixes) awaiting Gemini review; merge after disposition, then verify prod deploy.
+**Next action:** Burst complete - transcript-intake-bell + live-hardening fixes shipped to prod (PR #41, merge 6e4c0b9, 2026-07-24). Prod deploy verification done this session. NOTE: Gemini Code Assist is SUNSET - future /ag-ship release flows must use the fallback ship reviewer. /clear when ready; next session runs /ag-plan.
 **Last updated:** 2026-07-23 (dev-only ship; burst archived to closed/2026-07-23-transcript-intake-bell-52c42f2; manifest finalised)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -47,7 +47,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
      **PR #N:** WAITING_RESPONSE | reviewed <ISO> | reviewed_sha: <sha> | findings: HIGH: x, MEDIUM: y
      On disposition: remove entry; record outcome in HISTORY as **Gemini:** <outcome> -->
 
-**PR #41:** WAITING_REVIEW | opened 2026-07-24T08:55:00Z | retries: 0
+<!-- PR #41 shipped 2026-07-24: merged to P33-AI master (6e4c0b9). Gemini: SUNSET - gemini-code-assist[bot] announced consumer Gemini Code Assist review has ceased; fallback opus ship review of the post-probe delta ran instead: SHIP_OK, 0 findings. -->
 
 <!-- PR #16 shipped 2026-07-06: merged to P33-AI master (528214e). Gemini: R1 model_dump default-clobber fixed (f2c2939); R2 omit-vs-null ruled intentional (never-unassigned invariant), replied + resolved. -->
 

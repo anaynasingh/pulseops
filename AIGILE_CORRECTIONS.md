@@ -86,3 +86,8 @@ PENDING: [2026-07-23] Verify Postgres type/enum names against the LIVE database,
          Builder: claude.
          Why: the transcript-intake-bell plan asserted the live enum type was priority_level (verified against schema.sql:15); the live tables were actually created via the ORM with the default name prioritylevel, so the first dev deploy aborted every proposal INSERT with DatatypeMismatchError. schema.sql and the live schema have drifted.
          How to apply: before any migration referencing an existing type/enum/column, confirm the name with a live query (information_schema.columns udt_name / pg_type), or match what the ORM binds. Treat schema.sql as aspirational, not authoritative.
+
+PENDING: [2026-07-24] Gemini Code Assist (consumer, GitHub) is sunset - the /ag-ship blocking Gemini gate can never complete on this repo.
+         Builder: n/a.
+         Why: PR #41 sat unreviewed; gemini-code-assist[bot] posted "All code review activity has officially ceased." The ship flow's WAITING_REVIEW state would spin forever.
+         How to apply: at /ag-ship RELEASE FLOW, skip the Gemini wait and dispatch the fallback independent ship review (peer/opus adversarial review of the release delta) directly; record the outcome in the Gemini Reviews section with reviewer name. Candidate /ag-upstream: update canonical ag-ship for the sunset.
