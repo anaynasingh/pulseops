@@ -76,3 +76,13 @@ PENDING: [2026-06-26] When ag-init preflight hard-blocks with a parser-contract 
          Builder: n/a.
          Why: ag-init's header drift detector flags a missing parser-contract notice, but migrate_corrections_header no-ops when the Builder marker is already present, so drift never clears and .aigile/last-init is never written. Preflight then hard-blocks every burst at session start (the intake-default-assignee plan was blocked this way).
          How to apply: if preflight loops on a CORRECTIONS header-drift / parser-contract notice, manually update the AIGILE_CORRECTIONS.md header block to match the canonical template so the detector clears and last-init is written. Root cause is an upstream canonical bug — file /ag-upstream to fix migrate_corrections_header; remove this entry once the canonical fix lands.
+
+PENDING: [2026-07-23] Write the burst manifest and seven-field STATUS stream blocks at plan approval, atomically - never defer to probe.
+         Builder: n/a.
+         Why: the interrupted 2026-07-22 session left a 0-byte .aigile/manifests/<sha>.json and prose stream bullets in STATUS; probe's scope/risk-tier/executor gates (rc=1/49) and ag-manifest update all hard-failed mid-probe and had to be repaired reactively.
+         How to apply: at /ag-plan Step 7 approval, verify manifest exists AND is non-empty JSON, and STATUS ## Active streams carries the full seven-field block per stream, before setting Phase=Building. A 0-byte manifest should be treated as missing (delete + re-init).
+
+PENDING: [2026-07-23] Verify Postgres type/enum names against the LIVE database, never against schema.sql alone.
+         Builder: claude.
+         Why: the transcript-intake-bell plan asserted the live enum type was priority_level (verified against schema.sql:15); the live tables were actually created via the ORM with the default name prioritylevel, so the first dev deploy aborted every proposal INSERT with DatatypeMismatchError. schema.sql and the live schema have drifted.
+         How to apply: before any migration referencing an existing type/enum/column, confirm the name with a live query (information_schema.columns udt_name / pg_type), or match what the ORM binds. Treat schema.sql as aspirational, not authoritative.

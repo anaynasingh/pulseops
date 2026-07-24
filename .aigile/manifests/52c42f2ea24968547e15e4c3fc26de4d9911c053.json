@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.2.0",
+  "burst_sha": "52c42f2ea24968547e15e4c3fc26de4d9911c053",
+  "project_slug": "pulseops",
+  "burst_label": "transcript-intake-bell",
+  "orchestrator": {
+    "name": "Anayna Singh",
+    "email": "anayna.singh@prospect33.com"
+  },
+  "status": "finalised",
+  "started_at": "2026-07-23T07:15:29Z",
+  "finalised_at": "2026-07-23T09:33:53Z",
+  "phases": [
+    {
+      "name": "Building",
+      "entered_at": "2026-07-23T07:15:29Z"
+    },
+    {
+      "name": "Probing",
+      "entered_at": "2026-07-23T07:15:29Z"
+    },
+    {
+      "name": "Piloting",
+      "entered_at": "2026-07-23T09:11:23Z"
+    }
+  ],
+  "streams": [],
+  "stream_dependency_edges": [],
+  "reviews": {
+    "codex": null,
+    "gemini": {
+      "recorded_at": "2026-07-23T09:33:53Z",
+      "outcome": "SKIP",
+      "pr_number": null,
+      "notes": "dev-only ship per Orchestrator round_ship redirect; no PR to master, Gemini reviews PRs only"
+    }
+  },
+  "contributors": [
+    {
+      "name": "Anayna Singh",
+      "email": "anayna.singh@prospect33.com"
+    }
+  ],
+  "diff_stat": {
+    "files_changed": 50,
+    "insertions": 4687,
+    "deletions": 176
+  },
+  "builder_declarations": [],
+  "builder_terminal_invocations": [],
+  "governance_invocations": [],
+  "ship_fallback_authorizations": [],
+  "archive_locator": {
+    "path": "AIGILE_PLAN/closed/2026-07-23-transcript-intake-bell-52c42f2",
+    "recorded_at": "2026-07-23T09:33:28Z"
+  }
+}

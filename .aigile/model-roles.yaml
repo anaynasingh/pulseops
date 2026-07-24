@@ -1,22 +1,142 @@
 # model-roles.yaml schema
 # This file documents the structure written to <repo>/.aigile/model-roles.yaml
-# by ag-init. The .aigile/ directory is gitignored (machine-local state).
+# by ag-init. Unlike most of .aigile/ (machine-local state), this file is a
+# reviewable repo-level policy override — .gitignore explicitly un-ignores it
+# (Codex round 2/7) so a repo's chosen model roster is visible in git, not
+# silently machine-local.
 #
 # The model-roles.yaml file records which AI models are filling which roles
 # in the current engagement. Update manually if roles change mid-engagement.
 #
-# roles:
-#   Builder: <model-id or alias>   # primary code producer for this engagement
-#   Reviewer: <model-id or alias>  # adversarial reviewer (burst-plan + probe)
-#   Ship-gate: <model-id or alias> # final gate model before main merge
+# roster controls `peer` resolution. Put the active primary driver first, then
+# the preferred independent reviewer seat. `ag-driver set <name>` changes the
+# active driver without rewriting this policy file.
 #
-# Aliases: claude, codex, gemini (resolved by each skill to the installed version)
-# Full model IDs are also accepted (e.g. claude-sonnet-4-6, gpt-4o).
+# Simple scalar form (one model per role):
+#   roster: [codex, claude, copilot-second-opinion]
+#   roles:
+#     Builder: self
+#     Reviewer: peer
+#
+# Ordered-preference form (try models in order; on_fallback controls behaviour
+# when none are available):
+#   roles:
+#     Builder:
+#       prefer: [<model-id>]
+#       on_fallback: prompt    # prompt | stop
+#
+# on_fallback: prompt  — ask the Orchestrator to select a model
+# on_fallback: stop    — hard-stop (used for Reviewer/Ship-review to prevent
+#                        silent family collapse, which defeats independence)
+#
+# See global/cast-roster.yaml for the full execution roster (every actor a
+# burst's plan can name as a stream's Executor, with its dispatch contract,
+# tool scope, trigger, and artifact convention). This file resolves WHICH
+# MODEL fills a small set of engagement-level roles; cast-roster.yaml is the
+# catalog of every actor those roles (and others) can dispatch to.
+#
+# roles:
+#   Builder: <model-id or alias>   # default seed for a stream's Executor field
+#                                  # at plan time (see ag-plan's `- Executor:`
+#                                  # field) — NOT a live per-stream tracker.
+#                                  # Live per-stream execution state lives in
+#                                  # AIGILE_STATUS.md's per-stream executor
+#                                  # block, not here.
+#   Reviewer: <model-id or alias>  # adversarial reviewer (burst-plan + probe)
+#   Ship-review: <adapter-name>    # ship-review adapter; selects ag-ship-review-<value>
+#                                  # possible values: gemini | copilot | copilot-github | fallback | none | <custom-shim-name>
+#                                  # none  = no ship review (Probe is the final check)
+#                                  # gemini = ag-ship-review-gemini shim (legacy — Gemini Code Assist sunset 2026-07-17)
+#                                  # copilot = ag-ship-review-copilot shim (local Copilot CLI). NOT the escalation
+#                                  #           path for large release-range diffs — it fetches the diff via
+#                                  #           GitHub's ~20,000-line REST diff endpoint and has its own local
+#                                  #           byte guard; both can fail on a full dev→main release diff.
+#                                  # copilot-github = ag-ship-review-copilot-github shim (GitHub-native Copilot
+#                                  #           code review — request-and-poll, no local CLI, no diff embedded;
+#                                  #           still bounded by Copilot's own ~20,000-changed-line ceiling, but
+#                                  #           detects and escalates that case rather than silently passing)
+#                                  # fallback = ag-ship-review-fallback shim (family peer, agentic, NO size
+#                                  #           ceiling of any kind — the escalation target for copilot-github's
+#                                  #           PERMANENT/TEMPORARY outcomes, and the canonical default for
+#                                  #           every future onboarded repo, licence-independent)
+#   Ship-gate: <model-id or alias> # DEPRECATED: use Ship-review instead.
+#                                  # Kept for backward compat; ag-ship-review falls
+#                                  # back to this key when Ship-review is absent.
+#   planner: <model-id or alias>   # Plan agent model; inherit = use current session model
+#   pre_reviewer: <model-id or alias> # Pre-review agent at ag-probe Step 6.7 and ag-plan Step 5.7.
+#                                     # opus/fable → Prosecution frame (direct adversarial attack).
+#                                     # inherit/sonnet → Pre-mortem frame (failure-analyst framing that
+#                                     # bypasses helpful-mode even from the session model). Never skipped.
+#
+# Policy tokens:
+#   self  = current `.aigile/active-driver`
+#   peer  = first roster entry whose family differs from the active driver
+#           family; hard-stops if no independent peer exists
+#
+# Aliases: claude, codex, gemini, copilot-second-opinion, inherit (resolved by each skill at runtime)
+# Full model IDs are also accepted (e.g. claude-sonnet-4-6).
+# inherit resolves to whatever model is running the current session.
 #
 # Engagement mode lives in AIGILE_CHARTER.md frontmatter (mode: field), not here.
 # ag-status reads mode from CHARTER and surfaces it in the health report.
+#
+# access_methods: (Stream E, methodology-housekeeping round 1, 2026-07-19)
+# Copilot and OpenCode are both BRIDGE access methods - neither is a model
+# family in its own right. A bridge is only ever consulted for families with
+# no native CLI (google/gemini, moonshot/kimi, microsoft/mai) - anthropic and
+# openai are reached exclusively through their native CLI (claude, codex),
+# never through a bridge, so there is no fallback logic between native and
+# bridge to maintain for those two families. `enabled: false` means the
+# access method is skipped entirely by sequential-try resolution (treated as
+# absent, not merely deprioritised) - it stays fully present and functional
+# in the codebase, ready for a config-only re-enable (no code change) when a
+# future engagement needs it (e.g. a GitHub Enterprise client wanting native
+# Gemini Code Assist or Copilot code review).
+#
+# bridge_order: the sequence bridge-reachable families are tried in. Default
+# [opencode, copilot]: prefer OpenCode (broader model access, avoids paying
+# for Copilot-metered usage of a model already reachable another way) before
+# falling back to the local Copilot CLI adapter.
+access_methods:
+  opencode:
+    enabled: true
+  copilot:
+    enabled: false
+  gemini:
+    enabled: false
+
+bridge_order: [opencode, copilot]
+
+roster: [codex, claude, copilot-second-opinion]
 
 roles:
-  Builder: claude # primary code producer
-  Reviewer: codex # adversarial reviewer
-  Ship-gate: gemini # final gate before main merge
+  Builder: self # default seed for a stream's Executor field, not a live tracker — see global/cast-roster.yaml
+  Reviewer: peer # adversarial reviewer; resolves to claude (independent family, via the real ag-review-claude local-CLI adapter); copilot-second-opinion/Kimi remains a manual ad-hoc fallback
+  Ship-review: fallback # F1 (2026-07-19, CD-041 continuation): canonical default flipped from `copilot` to `fallback` unconditionally. `copilot` (local CLI) fetches the diff via GitHub's own ~20,000-line REST diff endpoint and has its own local byte guard — both can fail on a full dev→main release-range diff, the exact motivating failure (PR #89). `fallback` (family peer, agentic, no size ceiling) is licence-independent and works on every onboarded repo regardless of whether that org has GitHub-native Copilot code review enabled — the new `claude` service-health check (global/service-health.yaml) surfaces an absent/unauthenticated peer CLI up front rather than a silent degrade.
+  Ship-gate: gemini # DEPRECATED: kept for backward compat; prefer Ship-review
+  planner: opus # Plan agent — opus for routine planning. Fable is reserved for
+                # exceptional circumstances only (credit-conscious, 2026-07-09):
+                # request it explicitly per-invocation, do not default to it here
+                # or in any repo's local override.
+  pre_reviewer: opus # Pre-review agent — opus = Prosecution frame; inherit = Pre-mortem frame
+
+# GitHub Copilot CLI adapter's model menu. `default` is what
+# ag-ship-review-copilot uses when Ship-review: copilot is active.
+# `second_opinion_default` is the preferred ad-hoc adversarial/sense-check
+# model. Keep these distinct: the same model should not be both the ship-review
+# default and the standing second-opinion default.
+copilot:
+  available: [kimi-k2.7-code, gemini-3.5-flash, gemini-3.1-pro-preview]
+  default: gemini-3.1-pro-preview
+  second_opinion_default: kimi-k2.7-code
+
+# Claude CLI reviewer adapter's model menu (ag-review-claude). `default` is
+# used when the bare "claude" alias resolves via `Reviewer: peer` (or is
+# passed explicitly) rather than a concrete opus/sonnet/haiku/fable value.
+# Deliberately opus, not sonnet: Sonnet is already the workhorse builder
+# model elsewhere in AI-gile, so using it as the independent adversarial
+# Reviewer too would weaken the review rather than genuinely check the
+# builder's work (matches the pre_reviewer/planner opus precedent above).
+claude:
+  available: [opus, sonnet, haiku, fable]
+  default: opus

@@ -11,13 +11,14 @@ On your first response in every session:
 1. Check whether the SessionStart hook already fired and provided output
    in the system-reminder. If it did, act on that output directly — no
    manual run needed (avoids a duplicate).
-2. If no hook output is present in the system-reminder, run `ag-status
-   --quiet` manually. The hook is unreliable in the desktop app and web
+2. If no hook output is present in the system-reminder, run
+   `$HOME/.claude/aigile-canonical/scripts/ag-status --quiet` manually.
+   The hook is unreliable in the desktop app and web
    UI after `/clear` (confirmed bug: anthropics/claude-code#34072); the
    manual run is the guaranteed fallback.
 
 ```bash
-ag-status --quiet
+$HOME/.claude/aigile-canonical/scripts/ag-status --quiet
 ```
 
 Interpret the output (whether from the hook or the manual run):
@@ -91,6 +92,21 @@ work as it lands — do not wait to be asked. The harness default
 The burst base is the Codex adversarial review anchor; commits must
 land on dev for the review to cover the actual diff.
 
+### Stage ownership and gate discipline
+
+You own forward progress through the AI-gile cycle. After every substantive
+stage, tell the Orchestrator: (1) what completed and the evidence for it,
+(2) the exact next mandatory action, (3) who owns that action, and (4) whether
+Orchestrator confirmation is required. Do not leave a completed stage with a
+blank or make the Orchestrator infer the next step. Start normal, safe,
+in-scope next actions without waiting.
+
+Mandatory gates are never optional because they are inconvenient or because a
+tooling limitation is encountered. Do not call work ready to ship while a
+required gate is unresolved. State the gate, its evidence or failure, and the
+compliant route forward. If no compliant route exists, request an explicit,
+recorded Orchestrator exception; do not silently defer it.
+
 ### Verify your work
 
 Always self-verify. Run tests, check the UI, check the API. Flag
@@ -101,6 +117,28 @@ only the API check (Step 4) passed. Tests, Codex adversarial review,
 and the formal steer checkpoint are all still required. STATUS Phase
 moves Building → Steering via probe only — a working deploy is not
 probe done.
+
+### Test verification economy
+
+Applies everywhere — inside `/ag-probe` or `/ag-challenge`, and equally in
+ad-hoc fix-and-verify work outside a formal skill invocation (e.g. chasing
+a CI failure directly on a PR during ship finalization). Wasting
+Orchestrator wall-clock time on unnecessary verification is itself a
+failure of AI-gile, not a merely suboptimal tactical choice.
+
+Never invoke a bare full-suite test command. Run `/ag-test` (or
+`scripts/ag-test-plan` directly) with an explicit scope and rationale —
+it computes what actually needs to run and, for a large/full-suite plan,
+shards the work across parallel Haiku subagents. See the skill for the
+full protocol.
+
+This rule previously lived as restated prose in `docs/probe-fix-phase-gate.md`
+step 4.5 and inside `ag-probe`/`ag-challenge`'s own skill files, and was
+violated three times across three different contexts precisely because
+each fix only propagated the rule to the specific skill file in play,
+never to a mechanism every path actually runs through. `ag-test-plan` /
+`/ag-test` is that mechanism — see `AIGILE_CORRECTIONS_ARCHIVE.md` for the
+incident history this absorbs.
 
 ### Codex invocation
 
@@ -167,11 +205,14 @@ names below win:
 the active burst's working store under `current/` (per-round plan,
 adversarial critique, determination, change-request whitelist,
 preservation diff), and the closed-burst archive under
-`closed/<date>-<burst-label>-<shortsha>/`. The `long-term/` directory
-also holds CHARTER-extracted operational zones: `capabilities.md`
-(discovered capabilities), `deferred.md` (deferred items with trigger
-conditions), and `under-consideration.md` (items under consideration
-with resolution needs) — created by the data infrastructure burst.
+`closed/<date>-<burst-label>-<shortsha>/`. `ag-init` creates the
+CHARTER-extracted operational zones at the `AIGILE_PLAN/` root:
+`CAPABILITIES.md` (discovered capabilities), `DEFERRED.md` (deferred
+items with trigger conditions), and `CONSIDERATIONS.md` (items under
+consideration with resolution needs). A future data-infrastructure
+burst may relocate these under `long-term/` with lowercase-hyphenated
+names to match `sequence.md`/`revisions.md`'s convention — treat that
+as forward-looking, not current behaviour.
 See `AIGILE_PLAN/README.md` for the full structure and the
 file-anchored iteration rules.
 
@@ -194,10 +235,9 @@ Objectives. Read it before planning. Hard Specs are non-negotiable.
 If the CHARTER is blank, run /ag-adopt to seed it before doing any work.
 
 For extracted CHARTER content that changes frequently or accumulates
-history, read the peer artefacts instead: `AIGILE_PLAN/long-term/
-capabilities.md` (Discovered Capabilities), `AIGILE_PLAN/long-term/
-deferred.md` (Deferred items), `AIGILE_PLAN/long-term/
-under-consideration.md` (Under Consideration items), and
+history, read the peer artefacts instead: `AIGILE_PLAN/CAPABILITIES.md`
+(Discovered Capabilities), `AIGILE_PLAN/DEFERRED.md` (Deferred items),
+`AIGILE_PLAN/CONSIDERATIONS.md` (Under Consideration items), and
 `AIGILE_DECISIONS.md` (Challenged Decisions log). If any of these
 files does not yet exist, fall back to the corresponding section in
 AIGILE_CHARTER.md — transitional behaviour until the data burst lands.
