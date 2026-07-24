@@ -127,7 +127,13 @@ async def run_transcript_poll() -> dict:
                 await _poll_user(db, user, token, poll_start, stats, attempted_extractions)
                 # C3: the cursor advances to the poll-start timestamp ONLY when
                 # this user's entire iteration completed without exception.
-                user.m365_last_transcript_poll = poll_start
+                # Direct UPDATE (not ORM attribute): a per-transcript rollback
+                # inside _poll_user expires the user object, and setting an
+                # attribute on an expired instance risks sync IO.
+                from sqlalchemy import update
+                await db.execute(
+                    update(User).where(User.id == user_id).values(m365_last_transcript_poll=poll_start)
+                )
                 await db.commit()
             except Exception:
                 await db.rollback()
@@ -152,6 +158,9 @@ async def _poll_user(
 ) -> None:
     if attempted_extractions is None:
         attempted_extractions = set()
+    # Primitive id for everything downstream: a rollback expires the ORM user
+    # object, and any later attribute access would raise MissingGreenlet.
+    user_id = user.id
     window_start = poll_start - MAX_LOOKBACK
     cursor = user.m365_last_transcript_poll
     if cursor is not None:
@@ -183,7 +192,20 @@ async def _poll_user(
 
     for meeting_id, occurrences in series.items():
         occurrences.sort(key=lambda pair: pair[0])
-        transcripts = await graph_service.list_meeting_transcripts(token, meeting_id)
+        # Poison-meeting isolation: one meeting whose transcripts the user
+        # cannot read (Graph 403 on externally-organized meetings, malformed
+        # ids, transient 5xx) must not abort the iteration and pin the cursor
+        # forever - it stalled two users' polls within a day of deploy (live
+        # finding, 2026-07-24). Skip the meeting, keep the iteration alive;
+        # transient failures get retried naturally via the 1h scan overlap.
+        try:
+            transcripts = await graph_service.list_meeting_transcripts(token, meeting_id)
+        except Exception:
+            logger.warning(
+                "transcript listing failed for meeting %s... (user %s) - skipping this meeting",
+                meeting_id[:24], user_id, exc_info=True,
+            )
+            continue
         for entry in transcripts:
             created = parse_graph_datetime(entry.get("createdDateTime", ""))
             if created is None:
@@ -196,15 +218,23 @@ async def _poll_user(
             if not candidates:
                 continue
             occurrence_start, event = max(candidates, key=lambda pair: pair[0])
-            row = await _ensure_transcript_row(
-                db, token, user, meeting_id, entry, event, occurrence_start, stats
-            )
+            try:
+                row = await _ensure_transcript_row(
+                    db, token, user_id, meeting_id, entry, event, occurrence_start, stats
+                )
+            except Exception:
+                await db.rollback()  # leave the session clean for the next transcript
+                logger.warning(
+                    "transcript ingest failed for meeting %s... entry %s (user %s) - skipping this transcript",
+                    meeting_id[:24], str(entry.get("id", "?"))[:24], user_id, exc_info=True,
+                )
+                continue
             if row is None:
                 continue
             if row.extracted_at is None and row.id not in attempted_extractions:
                 attempted_extractions.add(row.id)
                 await _extract_transcript(db, row)
-            stats["proposed_created"] += await _fan_out_proposals(db, user, row)
+            stats["proposed_created"] += await _fan_out_proposals(db, user_id, row)
 
     # R1-3: retry sweep decoupled from the calendar window - re-pick ingested
     # rows still unextracted (bounded by the 7-day age cap) and re-extract.
@@ -227,14 +257,14 @@ async def _poll_user(
         # user whose current scan window still covers the meeting. Other
         # attendees whose scan passed while extraction was failing recover only
         # via the 1h overlap window.
-        if row.uploaded_by == user.id or (row.graph_meeting_id or "") in seen_meeting_ids:
-            stats["proposed_created"] += await _fan_out_proposals(db, user, row)
+        if row.uploaded_by == user_id or (row.graph_meeting_id or "") in seen_meeting_ids:
+            stats["proposed_created"] += await _fan_out_proposals(db, user_id, row)
 
 
 async def _ensure_transcript_row(
     db: AsyncSession,
     token: str,
-    user: User,
+    user_id,
     meeting_id: str,
     entry: dict,
     event: dict,
@@ -270,7 +300,7 @@ async def _ensure_transcript_row(
             raw_transcript=content,
             source="teams-poll",
             meeting_date=occurrence_start.date(),
-            uploaded_by=user.id,
+            uploaded_by=user_id,
             graph_transcript_id=graph_transcript_id,
             graph_meeting_id=meeting_id[:255],
             truncated=was_truncated,
@@ -290,7 +320,7 @@ async def _ensure_transcript_row(
         select(MeetingTranscript).where(MeetingTranscript.graph_transcript_id == graph_transcript_id)
     )
     row = refetched.scalar_one_or_none()
-    if row is not None and row.uploaded_by == user.id:
+    if row is not None and row.uploaded_by == user_id:
         stats["transcripts_ingested"] += 1
     return row
 
@@ -332,7 +362,7 @@ Transcript:
     await db.commit()
 
 
-async def _fan_out_proposals(db: AsyncSession, user: User, row: MeetingTranscript) -> int:
+async def _fan_out_proposals(db: AsyncSession, user_id, row: MeetingTranscript) -> int:
     """Create THIS user's pending proposals from the stored extraction, once.
 
     Idempotency (C1): gated on proposal-absence for (user_id, transcript_id),
@@ -343,7 +373,7 @@ async def _fan_out_proposals(db: AsyncSession, user: User, row: MeetingTranscrip
         return 0
     existing = await db.execute(
         select(ProposedTask.id)
-        .where(ProposedTask.user_id == user.id, ProposedTask.transcript_id == row.id)
+        .where(ProposedTask.user_id == user_id, ProposedTask.transcript_id == row.id)
         .limit(1)
     )
     if existing.scalar_one_or_none() is not None:
@@ -357,7 +387,7 @@ async def _fan_out_proposals(db: AsyncSession, user: User, row: MeetingTranscrip
         owner = item.get("owner")
         deadline = item.get("deadline")
         db.add(ProposedTask(
-            user_id=user.id,
+            user_id=user_id,
             transcript_id=row.id,
             meeting_title=row.title,
             meeting_date=row.meeting_date,

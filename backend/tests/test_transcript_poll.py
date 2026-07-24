@@ -126,6 +126,12 @@ def _result(scalar=None, rows=None):
     return m
 
 
+def _cursor_updates(db):
+    """Count executed UPDATE statements (the C3 cursor advance)."""
+    from sqlalchemy.sql.dml import Update
+    return sum(1 for c in db.execute.await_args_list if isinstance(c.args[0], Update))
+
+
 def _connected_user(cursor=None):
     user = MagicMock()
     user.id = uuid4()
@@ -138,15 +144,16 @@ def _connected_user(cursor=None):
 async def test_clean_iteration_advances_cursor():
     user = _connected_user()
     db = AsyncMock()
-    db.execute.side_effect = [_result(rows=[user.id]), _result(scalar=user)]
+    db.execute.side_effect = [_result(rows=[user.id]), _result(scalar=user), _result()]
     with patch.object(transcript_poll_service, "AsyncSessionLocal", _fake_session_factory(db)), \
          patch.object(transcript_poll_service.graph_service, "acquire_user_token", AsyncMock(return_value="tok")), \
          patch.object(transcript_poll_service, "_poll_user", AsyncMock()) as poll_user:
         stats = await run_transcript_poll()
     assert poll_user.await_count == 1
-    assert user.m365_last_transcript_poll is not None
+    assert _cursor_updates(db) == 1  # UPDATE users SET m365_last_transcript_poll
     assert stats["users_polled"] == 1
     db.commit.assert_awaited()
+    db.rollback.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -159,8 +166,9 @@ async def test_failed_iteration_preserves_cursor_and_continues_batch():
     db = AsyncMock()
     db.execute.side_effect = [
         _result(rows=[failing.id, healthy.id]),
-        _result(scalar=failing),
-        _result(scalar=healthy),
+        _result(scalar=failing),   # failing user fetch; _poll_user raises, no UPDATE
+        _result(scalar=healthy),   # healthy user fetch
+        _result(),                 # healthy user cursor UPDATE
     ]
 
     async def poll_side_effect(db_, user, *a, **k):
@@ -172,8 +180,7 @@ async def test_failed_iteration_preserves_cursor_and_continues_batch():
          patch.object(transcript_poll_service, "_poll_user", AsyncMock(side_effect=poll_side_effect)):
         stats = await run_transcript_poll()
 
-    assert failing.m365_last_transcript_poll == old_cursor
-    assert healthy.m365_last_transcript_poll is not None
+    assert _cursor_updates(db) == 1  # only the healthy user's cursor advanced
     assert stats["users_polled"] == 2
     db.rollback.assert_awaited()
 
@@ -288,7 +295,7 @@ def _extracted_row(action_items, extracted=True):
 async def test_fan_out_skipped_when_not_extracted():
     db = AsyncMock()
     user = _connected_user()
-    created = await transcript_poll_service._fan_out_proposals(db, user, _extracted_row([], extracted=False))
+    created = await transcript_poll_service._fan_out_proposals(db, user.id, _extracted_row([], extracted=False))
     assert created == 0
     db.add.assert_not_called()
 
@@ -299,7 +306,7 @@ async def test_fan_out_skipped_when_user_already_has_proposals():
     db.execute.return_value = _result(scalar=uuid4())  # absence check hits
     user = _connected_user()
     row = _extracted_row([{"task": "Do it", "owner": "Bob", "priority": "high"}])
-    created = await transcript_poll_service._fan_out_proposals(db, user, row)
+    created = await transcript_poll_service._fan_out_proposals(db, user.id, row)
     assert created == 0
     db.add.assert_not_called()
 
@@ -313,7 +320,7 @@ async def test_fan_out_creates_one_proposal_per_action_item():
         {"task": "Send report", "owner": "Alice", "deadline": "2026-07-25", "priority": "high"},
         {"task": "Book room", "owner": None, "priority": "not-a-priority"},
     ])
-    created = await transcript_poll_service._fan_out_proposals(db, user, row)
+    created = await transcript_poll_service._fan_out_proposals(db, user.id, row)
     assert created == 2
     assert db.add.call_count == 2
     db.commit.assert_awaited()
@@ -331,7 +338,7 @@ async def test_zero_action_item_extraction_is_terminal_no_proposals():
     db.execute.return_value = _result(scalar=None)
     user = _connected_user()
     row = _extracted_row([])
-    created = await transcript_poll_service._fan_out_proposals(db, user, row)
+    created = await transcript_poll_service._fan_out_proposals(db, user.id, row)
     assert created == 0
     db.add.assert_not_called()
     db.commit.assert_not_awaited()
@@ -394,3 +401,38 @@ def test_wrong_cron_secret_401_right_secret_passes():
         with pytest.raises(HTTPException):
             _verify_cron_secret(x_cron_secret="wrong")
         assert _verify_cron_secret(x_cron_secret="s3cret") is None
+
+
+@pytest.mark.asyncio
+async def test_poison_meeting_403_does_not_abort_user_iteration():
+    """A meeting whose transcript listing 403s is skipped; other meetings in
+    the same iteration still process and the iteration completes (so the
+    caller advances the cursor). Live finding 2026-07-24: two users' polls
+    were pinned forever by one externally-organized meeting."""
+    user = _connected_user()
+    db = AsyncMock()
+    db.execute.return_value = _result(rows=[])  # retry sweep: none
+    join_a = "https://teams.microsoft.com/l/meetup-join/19%3aa%40thread.v2/0?context=%7b%22Oid%22%3a%22oa%22%7d"
+    join_b = "https://teams.microsoft.com/l/meetup-join/19%3ab%40thread.v2/0?context=%7b%22Oid%22%3a%22ob%22%7d"
+    poison = {"subject": "External mtg", "start": {"dateTime": "2026-07-24T08:00:00.0000000", "timeZone": "UTC"},
+              "onlineMeeting": {"joinUrl": join_a}}
+    healthy = {"subject": "Team mtg", "start": {"dateTime": "2026-07-24T09:00:00.0000000", "timeZone": "UTC"},
+               "onlineMeeting": {"joinUrl": join_b}}
+    ok_transcript = {"id": "t-ok", "createdDateTime": "2026-07-24T09:05:00.0000000Z"}
+
+    async def lister(token, meeting_id):
+        import base64
+        if base64.b64decode(meeting_id).decode().endswith("19:a@thread.v2"):
+            raise RuntimeError("transcripts list failed (403): Forbidden")
+        return [ok_transcript]
+
+    ensured = AsyncMock(return_value=None)
+    with patch.object(transcript_poll_service.graph_service, "list_calendar_events", AsyncMock(return_value=[poison, healthy])), \
+         patch.object(transcript_poll_service.graph_service, "list_meeting_transcripts", AsyncMock(side_effect=lister)), \
+         patch.object(transcript_poll_service, "_ensure_transcript_row", ensured):
+        await transcript_poll_service._poll_user(
+            db, user, "tok", datetime(2026, 7, 24, 10, 0, tzinfo=timezone.utc),
+            {"users_polled": 0, "transcripts_ingested": 0, "proposed_created": 0},
+        )  # must NOT raise
+    assert ensured.await_count == 1
+    assert ensured.await_args.args[4]["id"] == "t-ok"
