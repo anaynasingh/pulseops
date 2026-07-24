@@ -8,7 +8,7 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
 **Active burst:** None
 **Burst base:** None
 **Plan reference:** None
-**Next action:** Burst complete — transcript-intake-bell shipped to DEV ONLY per Orchestrator round_ship redirect (origin/dev + p33/dev; NO merge to P33 master, prod deploy NOT triggered). Verify on the dev server (bell renders, poll ingests a real Teams transcript, confirm creates tasks), then promote via /ag-ship RELEASE FLOW (dev → P33-AI master PR, Gemini blocking) when satisfied. /clear when ready.
+**Next action:** PR #41 (dev -> P33 master, transcript-intake-bell + live-hardening fixes) awaiting Gemini review; merge after disposition, then verify prod deploy.
 **Last updated:** 2026-07-23 (dev-only ship; burst archived to closed/2026-07-23-transcript-intake-bell-52c42f2; manifest finalised)
 
 <!-- Next action is the forward pointer for resume-on-/clear. Every phase  -->
@@ -46,6 +46,8 @@ The "where are we right now" index. Thin by design. Plan content lives in `AIGIL
      **PR #N:** WAITING_REVIEW | opened <ISO> | retries: 0
      **PR #N:** WAITING_RESPONSE | reviewed <ISO> | reviewed_sha: <sha> | findings: HIGH: x, MEDIUM: y
      On disposition: remove entry; record outcome in HISTORY as **Gemini:** <outcome> -->
+
+**PR #41:** WAITING_REVIEW | opened 2026-07-24T08:55:00Z | retries: 0
 
 <!-- PR #16 shipped 2026-07-06: merged to P33-AI master (528214e). Gemini: R1 model_dump default-clobber fixed (f2c2939); R2 omit-vs-null ruled intentional (never-unassigned invariant), replied + resolved. -->
 
