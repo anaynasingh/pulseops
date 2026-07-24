@@ -81,3 +81,8 @@ PENDING: [2026-07-23] Write the burst manifest and seven-field STATUS stream blo
          Builder: n/a.
          Why: the interrupted 2026-07-22 session left a 0-byte .aigile/manifests/<sha>.json and prose stream bullets in STATUS; probe's scope/risk-tier/executor gates (rc=1/49) and ag-manifest update all hard-failed mid-probe and had to be repaired reactively.
          How to apply: at /ag-plan Step 7 approval, verify manifest exists AND is non-empty JSON, and STATUS ## Active streams carries the full seven-field block per stream, before setting Phase=Building. A 0-byte manifest should be treated as missing (delete + re-init).
+
+PENDING: [2026-07-23] Verify Postgres type/enum names against the LIVE database, never against schema.sql alone.
+         Builder: claude.
+         Why: the transcript-intake-bell plan asserted the live enum type was priority_level (verified against schema.sql:15); the live tables were actually created via the ORM with the default name prioritylevel, so the first dev deploy aborted every proposal INSERT with DatatypeMismatchError. schema.sql and the live schema have drifted.
+         How to apply: before any migration referencing an existing type/enum/column, confirm the name with a live query (information_schema.columns udt_name / pg_type), or match what the ORM binds. Treat schema.sql as aspirational, not authoritative.
